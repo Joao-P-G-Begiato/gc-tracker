@@ -1,0 +1,1459 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GC Tracker</title>
+<link rel="icon" href="icons/elesis.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
+<style>
+/* Identidade visual do Grand Chase Classic: um único visual (o do jogo), sem tema claro.
+   Fundo marinho com linhas geométricas (telas de evolução), painéis ardósia chanfrados (inventário/status),
+   rótulos laranja (Status), botão laranja (GAME PLAY), abas lilás, slots coloridos por raridade. */
+:root{
+  color-scheme:dark;
+  --bg:#121829; --surface:#232B3E; --surface-2:#1A2132; --inset:#141A28; --line:#3A4661; --line-2:#4C5977;
+  --ink:#EEF2FA; --ink-2:#C3CBDD; --muted:#8E99B4; --label:#F5A342;
+  --accent:#F39A1E; --accent-soft:rgba(243,154,30,.16); --accent-ink:#FFFFFF; --gold:#FFD24A;
+  --good:#9BE35A; --good-soft:rgba(140,224,64,.15); --partial:#F2C230; --partial-soft:rgba(242,194,48,.16); --no:#9AA4BE; --no-soft:rgba(141,152,180,.14);
+  --t-comum:#D3D8E3; --t-raro:#6AA8FF; --t-epico:#F2C230; --t-lend:#C08BFF; --t-ordem:#3FD1B8; --t-caos:#FF5E52; --t-anc:#FF6CC0;
+  --slot-raro:#7FA3D8; --slot-epico:#D8A56C; --slot-lend:#B67FD8; --slot-anc:#E891A0;
+  --bevel:inset 0 1px 0 rgba(255,255,255,.07),0 0 0 1px #0B0F19,0 3px 10px rgba(0,0,0,.25);
+  --shadow:0 4px 18px rgba(0,0,0,.45);
+  --display:"Chakra Petch","Segoe UI",system-ui,sans-serif; --body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{background-color:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;padding-inline:16px;padding-block:0 96px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='%231E2842' stroke-width='1.5'%3E%3Cpath d='M0 60 L60 0 M60 240 L240 60 M120 240 L240 120 M0 180 L40 140 L120 140 L200 60 L240 60 M140 0 L100 40 L20 40'/%3E%3C/g%3E%3C/svg%3E"),radial-gradient(ellipse at 50% -10%,#24345A 0%,rgba(18,24,41,0) 60%);
+  background-attachment:fixed}
+h1,h2,h3{font-family:var(--display);font-weight:600;letter-spacing:.01em;margin:0;text-wrap:balance}
+h2{font-size:22px} h3{font-size:16px}
+button,select,input{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+.wrap{max-width:1180px;margin:0 auto}
+/* header */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);margin-inline:-16px;padding:12px 16px 8px;border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:8px}
+.brand b{font-family:var(--display);font-size:20px;font-weight:700;letter-spacing:.04em}
+.brand b span{color:var(--accent)}
+.brand small{color:var(--muted);font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+nav{display:flex;gap:4px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none}
+nav button{border:0;background:transparent;padding:7px 12px;border-radius:8px;color:var(--ink-2);font-weight:600;white-space:nowrap;cursor:pointer}
+nav button:hover{background:var(--surface-2)}
+nav button[aria-current="true"]{background:var(--ink);color:var(--bg)}
+.status{font-size:12px;color:var(--muted)}
+main{padding-top:20px}
+/* generic */
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.between{justify-content:space-between}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.btn{border:1px solid var(--line);background:var(--surface);padding:8px 14px;border-radius:8px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--ink-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn:disabled{opacity:.5;cursor:default}
+.btn svg{width:16px;height:16px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select,input[type=number],input[type=text]{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 8px;min-width:0}
+input[type=number]{width:72px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.03em;text-transform:uppercase}
+label.f > *{font-size:15px;text-transform:none;letter-spacing:0;color:var(--ink);font-weight:400}
+.grid-f{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px}
+.tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle;white-space:nowrap}
+th{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700;background:var(--surface-2)}
+tr:last-child td{border-bottom:0}
+.av{width:40px;height:40px;border-radius:10px;background:var(--surface-2);object-fit:cover;flex:none;display:inline-grid;place-items:center;font-family:var(--display);font-weight:700;color:var(--muted);border:1px solid var(--line)}
+.av.lg{width:64px;height:64px;border-radius:14px}
+.av.sm{width:28px;height:28px;border-radius:7px;font-size:11px}
+/* chips */
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font-size:12.5px;font-weight:600;border:1px solid transparent;white-space:nowrap}
+.chip.ok{background:var(--good-soft);color:var(--good)}
+.chip.parcial{background:var(--partial-soft);color:var(--partial)}
+.chip.no{background:var(--no-soft);color:var(--no)}
+.chip.next{background:var(--accent-soft);color:var(--accent)}
+.tier{font-weight:700}
+.tier.RARO{color:var(--t-raro)} .tier.EPICO{color:var(--t-epico)} .tier.LENDARIO{color:var(--t-lend)} .tier.ORDEM{color:var(--t-ordem)} .tier.CAOS{color:var(--t-caos)} .tier.NENHUM{color:var(--muted)}
+.q{border-width:2px}
+.q.Comum{border-color:var(--t-comum)} .q.Raro{border-color:var(--t-raro)} .q.Épico{border-color:var(--t-epico)} .q.Lendário{border-color:var(--t-lend)} .q.Ancestral{border-color:var(--t-anc);background:color-mix(in srgb,var(--t-anc) 14%,var(--surface))}
+.ind{font-weight:700;width:18px;display:inline-block;text-align:center}
+.ind.up{color:var(--good)} .ind.down{color:var(--t-caos)} .ind.star{color:var(--gold)} .ind.bad{color:#fff;background:var(--t-caos);border-radius:50%}
+input.bad{border-color:var(--t-caos)!important;box-shadow:0 0 0 1px var(--t-caos)}
+.conj.Vazio{color:var(--t-anc);font-weight:700} .conj.Berkas{color:var(--t-epico);font-weight:700} .conj.Nenhum{color:var(--muted)}
+/* painel */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.stat b{display:block;font-family:var(--display);font-size:26px;font-weight:600;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;cursor:pointer;text-align:left}
+.card:hover{border-color:var(--ink-2)}
+.card .hd{display:flex;gap:10px;align-items:center}
+.card .hd h3{font-size:17px}
+.card .at{margin-left:auto;text-align:right;font-family:var(--display);font-weight:600;font-variant-numeric:tabular-nums}
+.card .at small{display:block;font-family:var(--body);font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.06em}
+/* identidade visual por personagem: fundo = cor do fundo do ícone */
+.card.id{background:var(--cc);color:var(--cc-ink);border-color:color-mix(in srgb,var(--cc) 72%,#000)}
+.card.id:hover{border-color:var(--cc-ink)}
+.card.id .muted,.card.id .at small{color:inherit;opacity:.72}
+.card.id .chip.next,.card.id .chip.no{background:color-mix(in srgb,var(--cc-ink) 14%,transparent);color:inherit}
+.card.id .chip.ok{background:color-mix(in srgb,var(--cc-ink) 18%,transparent);color:inherit}
+.card.id .bar{background:color-mix(in srgb,var(--cc-ink) 16%,transparent)}
+.card.id .bar i{background:var(--cc-ink)}
+.card.id .av{border-color:color-mix(in srgb,var(--cc-ink) 30%,transparent)}
+.charhd.id{background:var(--cc);color:var(--cc-ink);border-radius:14px;padding:14px}
+.charhd.id .muted{color:inherit;opacity:.75}
+.charhd.id .btn.ghost{color:inherit}
+.tdot{font-size:10px;margin-right:2px;text-shadow:0 0 1px rgba(0,0,0,.35)}
+.chip[class*="tb-"]{border-width:1.5px;border-style:solid}
+.tb-RARO{border-color:var(--t-raro)!important} .tb-EPICO{border-color:var(--t-epico)!important} .tb-LENDARIO{border-color:var(--t-lend)!important}
+.tb-ORDEM{border-color:var(--t-ordem)!important} .tb-CAOS{border-color:var(--t-caos)!important} .tb-ANCESTRAL{border-color:var(--t-anc)!important}
+.tier.ANCESTRAL{color:var(--t-anc)}
+.card .chips .chip{white-space:normal;max-width:100%;text-align:left;line-height:1.3;padding-block:3px;border-radius:10px}
+.card,.card .hd>div{min-width:0}
+.card h3{overflow-wrap:anywhere}
+.swatch{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:middle;border:1px solid var(--line)}
+input[type=color]{width:38px;height:28px;padding:0;border:1px solid var(--line);border-radius:6px;background:none;cursor:pointer}
+.bar{height:6px;background:var(--no-soft);border-radius:999px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--good);border-radius:999px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+/* char view */
+.charhd{display:flex;gap:14px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.charhd .meta{display:flex;flex-direction:column}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px;overflow-x:auto}
+.tabs button{border:0;background:transparent;padding:9px 12px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.pieces{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:12px}
+.piece{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.piece.off{opacity:.55}
+.piece .ph{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.piece .ph h3{margin-right:auto}
+.prop{display:grid;grid-template-columns:1fr 104px 120px 22px;gap:8px;align-items:center;padding:4px 0}
+.prop input{width:100%}
+.prop .lbl{font-size:13.5px}
+.prop .lbl small{display:block;color:var(--muted);font-size:11.5px}
+.savebar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--ink);color:var(--bg);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px))}
+.savebar .wrap{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.savebar .btn{border-color:transparent}
+.savebar .btn.ghost{color:var(--bg)}
+/* modal */
+.modal{position:fixed;inset:0;z-index:40;background:rgba(10,12,20,.55);display:grid;place-items:center;padding:16px}
+.modal .box{background:var(--surface);border-radius:14px;padding:18px;width:min(640px,100%);max-height:90vh;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:18px;text-align:center;color:var(--muted);cursor:pointer}
+.drop.has{border-style:solid}
+.drop img{max-height:220px;border-radius:8px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:76px;z-index:50;background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-weight:600;box-shadow:var(--shadow)}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+.chart{position:relative}
+.chart svg{width:100%;height:auto;display:block}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);padding:6px 9px;border-radius:8px;font-size:12.5px;white-space:nowrap;transform:translate(-50%,-110%)}
+.sect{display:flex;flex-direction:column;gap:14px}
+.tipm{white-space:nowrap;line-height:1.45;max-height:300px;overflow:hidden}
+.legenda{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 6px}
+.leg{background:var(--surface-2);border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:4px 10px;font-size:12.5px;cursor:pointer;font:inherit;font-size:12.5px}
+.leg.off{opacity:.4;text-decoration:line-through}
+.legend-dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:middle}
+/* ===== pele do jogo ===== */
+.top{background:linear-gradient(180deg,#1E2638 0%,#161C2B 100%);border-bottom:1px solid var(--line);box-shadow:0 2px 0 #0B0F19,0 6px 18px rgba(0,0,0,.35)}
+.brand b{font-size:22px;font-weight:700;letter-spacing:.03em;background:linear-gradient(180deg,#FFF1A6 0%,#FFC93A 45%,#F28A12 70%,#D6541A 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 1px 0 #5A2208) drop-shadow(0 0 1px #2A1204)}
+.brand b span{color:transparent}
+.brand small{color:var(--ink-2)}
+nav{gap:3px}
+nav button{background:linear-gradient(180deg,#3A4560,#2A3247);border:1px solid var(--line-2);border-radius:6px;color:var(--ink-2);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+nav button:hover{background:linear-gradient(180deg,#45516F,#323B53);color:var(--ink)}
+nav button[aria-current="true"]{background:linear-gradient(180deg,#B4C2F5,#8196DE);border-color:#C9D4FA;color:#fff;text-shadow:0 1px 1px rgba(20,30,80,.6)}
+.panel,.stat,.piece,.tablebox{background:linear-gradient(180deg,#273046 0%,var(--surface) 40%);border:1px solid var(--line);border-radius:8px;box-shadow:var(--bevel)}
+.panel h3,.piece h3{color:#fff}
+label.f,.stat span,th{color:var(--label)}
+th{background:var(--surface-2)}
+td{border-bottom-color:#2E3850}
+select,input[type=number],input[type=text]{background:var(--inset);border:1px solid var(--line);color:var(--ink);border-radius:5px;box-shadow:inset 0 1px 2px rgba(0,0,0,.4)}
+select option{background:#1A2132;color:var(--ink)}
+.btn{background:linear-gradient(180deg,#6A90C9,#3F6399);border:1px solid #86A6DA;color:#fff;border-radius:6px;text-shadow:0 1px 1px rgba(10,20,50,.5);box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 1px 0 #0B0F19}
+.btn:hover{border-color:#B7CBF0;filter:brightness(1.08)}
+.btn.primary{background:linear-gradient(180deg,#FFC24A 0%,#F7981C 55%,#E4780C 100%);border-color:#FFD27A;color:#fff;text-shadow:0 1px 1px rgba(90,40,0,.6);font-family:var(--display);letter-spacing:.04em}
+.btn.ghost{background:transparent;border-color:transparent;box-shadow:none;text-shadow:none;color:inherit}
+.av{border:2px solid #A2ABBD;border-radius:6px;background:#2A3040;box-shadow:inset 0 0 0 1px #20263A,0 1px 0 #0B0F19}
+.av.lg{border-radius:8px;border-width:3px}
+.card{border-radius:8px;box-shadow:var(--bevel)}
+.card.id{border-width:2px}
+.chip.next{background:var(--accent-soft);color:#FFC878}
+.tabs{border-bottom-color:var(--line);overflow-y:hidden;scrollbar-width:none;padding-top:2px}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{background:linear-gradient(180deg,#333D56,#27304A);border:1px solid var(--line-2);border-bottom:0;border-radius:6px 6px 0 0;color:var(--ink-2)}
+.tabs button[aria-selected="true"]{background:linear-gradient(180deg,#B4C2F5,#8196DE);color:#fff;border-color:#C9D4FA;text-shadow:0 1px 1px rgba(20,30,80,.6)}
+.piece{border-top-width:4px}
+.piece.cj-Vazio{border-top-color:var(--slot-anc)} .piece.cj-Berkas{border-top-color:var(--slot-lend)} .piece.cj-Nenhum{border-top-color:var(--line)}
+.prop .lbl{color:#7CC4FF}
+.conj.Berkas{color:var(--t-lend)}
+.savebar{background:linear-gradient(180deg,#232B3E,#161C2B);color:var(--ink);border-top:1px solid var(--line-2);box-shadow:0 -4px 16px rgba(0,0,0,.4)}
+.savebar .btn.ghost{color:var(--ink-2)}
+.modal .box{background:rgba(32,37,50,.97);border:1px solid var(--line-2);border-radius:8px;box-shadow:var(--shadow)}
+.modal .box h3{color:#FF8AD0}
+.drop{border-color:var(--line-2);background:var(--inset)}
+.toast{background:linear-gradient(180deg,#FFC24A,#E4780C);color:#fff;text-shadow:0 1px 1px rgba(90,40,0,.6)}
+.status{color:var(--ink-2)}
+.stat b{color:#fff}
+.bar{background:#11172A;box-shadow:inset 0 1px 2px rgba(0,0,0,.5)}
+.bar i{background:linear-gradient(90deg,#8CE040,#E8F060)}
+h2{color:#fff;text-shadow:0 2px 0 #0B0F19}
+.charhd:not(.id){background:linear-gradient(180deg,#273046,var(--surface));border:1px solid var(--line);border-radius:8px;padding:14px;box-shadow:var(--bevel)}
+.charhd.id{border:2px solid color-mix(in srgb,var(--cc) 70%,#000);box-shadow:var(--bevel)}
+.charhd.id h2{color:inherit;text-shadow:none}
+.thsort{background:none;border:0;padding:0;font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer;display:inline-flex;gap:5px;align-items:center}
+.thsort .seta{opacity:.45;font-size:10px}.thsort.on{color:#fff}.thsort.on .seta{opacity:1;color:var(--label)}.thsort:hover{color:#fff}
+.bulk{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:12px}
+.bulkchars{display:flex;flex-wrap:wrap;gap:6px}
+.bulkchar{display:inline-flex;align-items:center;gap:6px;padding:3px 9px 3px 4px;border:1px solid var(--line);border-radius:999px;cursor:pointer;font-size:13px;background:var(--inset)}
+.bulkchar input{margin:0}.bulkchar.on{border-color:var(--label);background:var(--accent-soft);color:#fff}
+.invgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+input.inv{width:100px;font-size:15.5px}
+tr.tot td{background:var(--surface-2);border-top:2px solid var(--line-2)}
+.charnav{display:flex;align-items:center;gap:6px}
+.charnav .btn{padding:6px 12px;font-size:18px;line-height:1}
+.charnav select{min-width:120px}
+@media (max-width:560px){ .charnav{margin-left:0!important;width:100%} .charnav select{flex:1} }
+/* trilha do despertar */
+.trilha{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px}
+.trilha .seta{align-self:center;color:var(--muted);font-size:20px;font-weight:700}
+.dno,.no-grande{background:linear-gradient(180deg,#273046,var(--surface));border:1px solid var(--line);border-radius:8px;padding:8px 10px;box-shadow:var(--bevel);display:flex;flex-direction:column;gap:6px;min-width:0}
+.dno{border-top-width:3px;width:260px;max-width:100%;padding:10px 12px;gap:8px}
+.dno select{width:100%} .dno .row select{flex:1;width:auto} .prop input{font-size:15.5px;font-variant-numeric:tabular-nums}
+.no-hd{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.no-criacao{border-top-color:#6AA8FF} .no-criacao .no-hd{color:#8FC0FF}
+.no-destruicao{border-top-color:#FF6A5E} .no-destruicao .no-hd{color:#FF8E84}
+.no-harmonia{border-top-color:#F2C230} .no-harmonia .no-hd{color:#F7D56A}
+.no-destruicaoL{border-top-color:#FF6A5E} .no-destruicaoL .no-hd{color:#FF8E84}
+.no-grande.lib{border-color:#7FD8FF;background:linear-gradient(180deg,#203a52,#1f2840)} .no-grande.lib.on{border-color:#FF6CC0}
+.no-grande .ef{font-size:12px;color:var(--muted)}
+.trilha.off{opacity:.55}
+.no-grande{border:2px solid #C9B6FF;background:linear-gradient(180deg,#3A3160,#272645);width:190px;max-width:100%;justify-content:center;padding:12px}
+.no-grande b{font-family:var(--display);color:#fff}
+.no-grande.on{border-color:#FF6CC0;box-shadow:0 0 0 1px #0B0F19,0 0 14px rgba(255,108,192,.35)}
+@media (max-width:560px){ .prop{grid-template-columns:1fr 92px 108px 18px} .pieces{grid-template-columns:1fr} .dno,.no-grande{width:100%} body{font-size:14.5px} }
+@media (prefers-reduced-motion:no-preference){ .card,.btn{transition:border-color .15s} }
+/* versão web: leitura de print pela IA não existe fora do claude.ai */
+[data-act^="print"]{display:none!important}
+.login{max-width:440px;margin:48px auto;text-align:center;display:flex;flex-direction:column;gap:14px;align-items:center}
+.btn.google{display:inline-flex;align-items:center;gap:10px;font-size:16px;padding:10px 18px}
+</style>
+
+<header class="top"><div class="wrap">
+  <div class="brand"><b>GC<span>·</span>Tracker</b><small>Grand Chase</small></div>
+  <nav id="nav" aria-label="Seções"></nav>
+  <span class="status" id="status">Conectando…</span>
+</div></header>
+<main class="wrap" id="main"></main>
+<div id="overlay"></div>
+
+<script>
+"use strict";
+/* ---------------- Referência padrão (sobrescrita por config/reference) ---------------- */
+const DEFAULT_CHARS = [
+  ["Elesis",1],["Lire",1],["Arme",1],["Lass",1],["Ryan",1],["Ronan",1],["Amy",1],["Jin",1],["Sieg",1],["Mari",1],
+  ["Dio",0],["Zero",0],["Rey",0],["Lupus",0],["Lin",0],["Azin",0],["Holy",0],["Edel",0],["Veiga",0],["Decane",0],["Ai",0],["Kallia",0],["Uno",0],["Iris",0],["Ereb",0]
+].map(([nome,a2],i)=>({id:slug(nome),nome,arma2:!!a2,ordem:i+1,img:null,ativo:true}));
+const TIERS = ["Nenhum","RARO","EPICO","LENDÁRIO","ORDEM","CAOS"];
+/* Ordem = 0 para o farm: não pode ser craftado para o Caos, então o caminho Épico → Lendário → Caos continua todo pendente (igual à aba Listas da planilha). Nos atributos ele vale como Lendário. */
+const TIER_LVL = {NENHUM:0,RARO:1,EPICO:2,LENDARIO:3,ORDEM:0,CAOS:4};
+const TIER_LABEL = {Nenhum:"Nenhum",RARO:"Raro",EPICO:"Épico","LENDÁRIO":"Lendário",ORDEM:"Ordem",CAOS:"Caos",ANCESTRAL:"Ancestral"};
+const CONJ = ["Nenhum","Berkas","Vazio"];
+const QUAL = ["Comum","Raro","Épico","Lendário","Ancestral"];
+const CORES = [["Vermelha","#D93A3A","Dano do pet"],["Amarela","#E0B400","Mantém a barra ao trocar de sala"],["Azul","#2F6FD6","Recuperação de MP"],["Roxa","#7B3FB5","Resistência à contaminação"],["Verde","#1D9A5B","Velocidade da barra de ataque"]];
+const EQUIP = [
+  {id:"ELMO",label:"Elmo",xl:"ELMO",cards:"elmo"},{id:"COTA",label:"Cota",xl:"COTA",cards:"cota"},
+  {id:"CALCA",label:"Calça",xl:"CALÇA",cards:"calca"},{id:"LUVA",label:"Luva",xl:"LUVA",cards:"arma"},
+  {id:"BOTA",label:"Bota",xl:"BOTA",cards:"calca"},{id:"CAPA",label:"Capa",xl:"CAPA",cards:"cota"},
+  {id:"ARMA",label:"Arma",xl:"ARMA",cards:"arma"},{id:"ARMA2",label:"Arma 2",xl:"ARMA 2",cards:"arma",only2:true}
+];
+const ACESS = [{id:"DIADEMA",label:"Diadema",xl:"DIADEMA",short:"D"},{id:"MASCARA",label:"Máscara",xl:"MÁSCARA",short:"M"},{id:"ASAS",label:"Asas",xl:"ASAS",short:"A"},{id:"FACAS",label:"Facas",xl:"FACAS",short:"F"},{id:"ESCUDO",label:"Escudo",xl:"ESCUDO",short:"E"}];
+function pieceInfo(pid){const e=EQUIP.find(p=>p.id===pid);if(e)return {p:e,base:`pecas.${pid}`,acess:false};const a=ACESS.find(p=>p.id===pid);return a?{p:a,base:`acess.${pid}`,acess:true}:null}
+const PIECE_BY_NORM = {ELMO:"ELMO",COTA:"COTA",CALCA:"CALCA",LUVA:"LUVA",BOTA:"BOTA",CAPA:"CAPA",ARMA:"ARMA","ARMA 1":"ARMA","ARMA 2":"ARMA2",ARMA2:"ARMA2",DIADEMA:"DIADEMA",MASCARA:"MASCARA",ASAS:"ASAS",FACAS:"FACAS",ESCUDO:"ESCUDO",ESCUDOS:"ESCUDO"};
+const PROPS = [
+  {id:"atq",label:"Ataque",key:"Ataque",dec:0},{id:"atqesp",label:"Ataque Especial",key:"Ataque Especial",dec:0},
+  {id:"acerto",label:"Acerto Crítico",key:"Acerto Critico",dec:2},{id:"danocrit",label:"Dano Crítico",key:"Dano Critico",dec:2},
+  {id:"costas",label:"Ataque Costas",key:"Ataque Costas",dec:2}
+];
+const DEFAULT_VAZIO = [
+  ["Acerto Critico",1.61,3.6,3.21],["Ataque",361,560,500],["Ataque Costas",1.02,5,4.21],["Ataque Especial",602,1000,875],
+  ["Chance Lança",0.02,4,3.36],["Dano Critico",16.08,32,28.12],["Dano Lança",15,3000,2400],["Defesa",131,330,294],
+  ["Defesa Especial",202,600,525],["EXP",0.1,2.09,1.81],["GP",0,0.5,0.43],["HP Rec.",10.05,20,17.21],["MP Rec.",4.02,8,6.88],
+  ["Res. Contaminação",1.1,3.09,2.13],["Vitalidade",131,330,294]
+].map(([nome,min,max,berkas])=>({nome,min,max,berkas}));
+const DEFAULT_CARTAS = {
+  arma:["Coletor da Morte[31,5%] [Atq.E 530]","Gaian [31,5%]","Desafiador do Vazio [31,5%]","Surtrak, das Chamas [28.75]","Dominador Abissal [28%]","Devorador do Vazio [27%]","Estrela Chase [26,5%]","Dêmonio Desconhecido [26,5%]","Sombra Sangrenta [26,5%]","Guerreiro Gon [26,5%]","Berkas [26,39%]","Nenhuma das top"],
+  elmo:["Memoria Preciosa [ataque : 100]","Olhar Permanece [ataque : 100]","Luz Estelar da Noite Profunda [ataque : 100]","O Que Não Pode Ser Desfeito [ataque : 100]","Carta com Promessa [ataque : 100]","A Direção do Coração [ataque : 100]","Zekars [Cont. 0.99]","Aldeon [Cont. 0.82]","Naga Harrier [Cont. 0.67]","Grande Guardião Harrier [Cont. 0.67]","Nenhuma das top"],
+  calca:["Bruxa do Caos [785]","Grand Chaser [785]","Seareton [772]","Perseguidor do Vazio [772]","Astaroth  [774]","Observador do Vazio [765]","Chromos [765]","Sol Chase [760]","Sistema de Controle do Trono [760]","Horbes Transcendida [742]","General Supremo Sentinela [742]","Nenhuma das top"],
+  cota:["Claus Infinito Duel (IV) [555]","Exterminador do Vazio [530]","Vingador do Vazio [515]","Astaroth Criador [515]","O Esquecido [510]","Trevas Encarnadas [510]","Guardião do Tempo [507]","Lua Chaser [475]","Solucionadora da Tempestade [475]","Renak [455]","Nenhuma das top"]
+};
+const PEDRAS = [[3,"Triangular"],[4,"Losangular"],[6,"Hexagonal"]];
+function tipoPedra(n){n=+n;if(!n)return "";return n>=6?"Hexagonal":n>=4?"Losangular":"Triangular"}
+function parsePedra(v){if(v==null||v==="")return null;const n=parseNum(v);if(n)return n>=6?6:n>=4?4:3;const t=norm(v);if(t.startsWith("HEX"))return 6;if(t.startsWith("LOS"))return 4;if(t.startsWith("TRI"))return 3;return null}
+/* anel = conjunto,nível: x.0 … x.5 dentro do conjunto I, II ou III; 4 = Ciclo Infinito */
+const ANEL_NOMES = ["Anel Esmaecido da Dimensão","Anel Brilhante da Dimensão","Anel Esmaecido do Infinito","Anel Forjado do Infinito","Anel Brilhante do Infinito","Promessa Incumprível"];
+const ANEL_OPTS = (()=>{ const r=["I","II","III"], o=[[0,"Nenhum"]];
+  for(let c=1;c<=3;c++) for(let l=0;l<=5;l++) o.push([+(c+l/10).toFixed(1),`${ANEL_NOMES[l]} (${r[c-1]})`]);
+  o.push([4,"Anel do Ciclo Infinito"]); return o; })();
+function anelNome(v){v=+v||0;if(!v)return "—";const o=ANEL_OPTS.find(x=>Math.abs(x[0]-v)<1e-9);return o?o[1]:fmtNum(v,1)}
+/* brincos e piercings: tudo que o personagem tem (equipado ou no inventário) */
+const ATTR_LVL = {RARO:1,EPICO:2,LENDARIO:3,ORDEM:3,CAOS:4};
+const JOIA_TIERS = ["RARO","EPICO","LENDÁRIO","ORDEM","CAOS"];
+function joiasOf(c){if(Array.isArray(c?.joias))return c.joias;const o=[];
+  if(c?.brinco&&norm(c.brinco)!=="NENHUM")o.push({tipo:"Brinco",tier:c.brinco,equipado:true});
+  if(c?.piercing&&norm(c.piercing)!=="NENHUM")o.push({tipo:"Piercing",tier:c.piercing,equipado:true});return o}
+function farmLvl(c,tipo){return Math.max(0,...joiasOf(c).filter(j=>j.tipo===tipo).map(j=>tierLvl(j.tier)))}
+function bestEquip(js,tipo){const e=js.filter(j=>j.tipo===tipo&&j.equipado).sort((a,b)=>(ATTR_LVL[norm(b.tier)]||0)-(ATTR_LVL[norm(a.tier)]||0));return e[0]?.tier||"Nenhum"}
+function joiaCheck(js){const eq=js.filter(j=>j.equipado),errs=[];
+  if(eq.length>2)errs.push("Só dá para equipar 2 ao mesmo tempo (brincos e/ou piercings).");
+  ["Brinco","Piercing"].forEach(t=>{const x=eq.filter(j=>j.tipo===t);if(x.length===2&&norm(x[0].tier)===norm(x[1].tier))errs.push(`Dois ${t.toLowerCase()}s equipados precisam ser de tiers diferentes.`)});
+  const b=eq.find(j=>j.tipo==="Brinco"),p=eq.find(j=>j.tipo==="Piercing");
+  const set=eq.length===2&&b&&p&&norm(b.tier)===norm(p.tier)&&["EPICO","LENDARIO","CAOS"].includes(norm(b.tier))?b.tier:null;
+  return {errs,set,eq:eq.length}}
+
+/* metas: mesmas regras da aba O Que Fazer */
+const METAS = [];
+const NOMES = {brinco:{RARO:"Brinco da Dimensão Enfraquecida",EPICO:"Brinco da Dimensão Completa","LENDÁRIO":"Brinco da Dimensão Perfeita",ORDEM:"Brinco do Outro Mundo da Ordem",CAOS:"Brinco do Outro Mundo do Caos"}};
+NOMES.piercing=Object.fromEntries(Object.entries(NOMES.brinco).map(([k,v])=>[k,v.replace(/^Brinco/,"Piercing")]));
+const TIER_BY_N = {2:"EPICO",3:"LENDÁRIO",4:"CAOS"};
+[["brinco","Brinco"],["piercing","Piercing"]].forEach(([f,L])=>[[2,"Épico"],[3,"Lendário"],[4,"Caos"]].forEach(([n,t])=>METAS.push({id:`${f}${n}`,grupo:L,chain:f,label:NOMES[f][TIER_BY_N[n]]||`${L} ${t}`,tier:TIER_BY_N[n],xl:`${L} ${t}`,test:c=>farmLvl(c,L)>=n})));
+function tierOpts(f){return TIERS.map(t=>[t,NOMES[f][t]?`${TIER_LABEL[t]} · ${NOMES[f][t]}`:TIER_LABEL[t]])}
+[[2.4,"Anel Brilhante do Infinito (II)","Anel Brilhante 2"],[3.4,"Anel Brilhante do Infinito (III)","Anel Brilhante 3"],[4,"Anel do Ciclo Infinito","Anel Brilhante 4"]].forEach(([v,l,xl])=>METAS.push({id:`anel${v}`,grupo:"Anel",chain:"anel",label:l,xl,tier:v>=4?"ANCESTRAL":"LENDÁRIO",test:c=>(+c.anel||0)>=v-1e-9}));
+EQUIP.filter(p=>!p.only2).forEach(p=>METAS.push({id:`vz_${p.id}`,grupo:"Vazio",tier:"ANCESTRAL",label:`${p.label} do Vazio`,xl:p.label,test:c=>c.pecas?.[p.id]?.conjunto==="Vazio"}));
+ACESS.forEach(p=>METAS.push({id:`vz_${p.id}`,grupo:"Vazio",tier:"ANCESTRAL",label:`${p.label} do Vazio`,xl:p.label==="Escudo"?"Escudos":p.label==="Máscara"?"Mascara":p.label,test:c=>c.acess?.[p.id]?.conjunto==="Vazio"}));
+const TORN_NOME = ["Eternidade","Harmonia","Consolação","Escuridão","Apocalipse"];
+const TORN = TORN_NOME.map(s=>`Tornozeleira de Espinhos da Escuridão (${s})`);
+const TORN_TIER = ["RARO","EPICO","EPICO","LENDÁRIO","LENDÁRIO"];
+for(let n=1;n<=5;n++) METAS.push({id:`torn${n}`,grupo:"Tornozeleira",chain:"torn",label:TORN[n-1],short:TORN_NOME[n-1],tier:TORN_TIER[n-1],xl:`Tornozeleira ${n}`,test:c=>(+c.tornozeleira||0)>=n});
+[["sr","SR","SR"],["colar","Colar","Colar"],["despertar2","Despertar 2","Despertar 2"],["despertar3","Despertar 3","Despertar 3"]].forEach(([f,l,xl])=>METAS.push({id:f,grupo:"Manual",manual:f,label:l,xl,test:c=>c[f]==="OK"?true:c[f]==="Parcial"?"parcial":false}));
+/* Despertar Liberto: a missão e os 5 nós grandes (núcleos principais), na ordem do caminho */
+METAS.push({id:"liberto",grupo:"Despertar Liberto",chain:"lib",label:"Despertar Liberto",xl:"Despertar Liberto",test:c=>c.liberto==="OK"});
+[["unidade","Unidade"],["indomavel","Indomabilidade"],["abundancia","Abundância"],["persistencia","Persistência"],["ressonancia","Ressonância"]].forEach(([k,l])=>METAS.push({id:`lib_${k}`,grupo:"Despertar Liberto",chain:"lib",label:`Liberto: Núcleo da ${l}`,xl:`Liberto ${l}`,test:c=>c.nos?.g4?.[k]==="OK"}));
+/* filtros do painel: prev = está exatamente no passo anterior da meta; prog = 0..1 do caminho até ela (para "perto de atingir") */
+METAS.forEach(m=>{const pend=c=>m.test(c)!==true;
+  if(m.chain==="brinco"||m.chain==="piercing"){const n=+m.id.slice(-1),T=m.grupo;m.prevLabel=`já tem ${T} ${TIER_LABEL[TIER_BY_N[n-1]]||"Raro"}`;m.prev=c=>farmLvl(c,T)===n-1;m.prog=c=>Math.min(1,farmLvl(c,T)/n)}
+  else if(m.chain==="anel"){const v=+m.id.slice(4),ix=x=>Math.max(0,ANEL_OPTS.findIndex(o=>Math.abs(o[0]-(+x||0))<1e-9)),alvo=ix(v),ant=ANEL_OPTS[alvo-1];
+    m.prevLabel=`já tem ${ant[1]}`;m.prev=c=>ix(c.anel)===alvo-1;m.prog=c=>Math.min(1,ix(c.anel)/alvo)}
+  else if(m.chain==="torn"){const n=+m.id.slice(4);m.prevLabel=n>1?`já tem Tornozeleira ${n-1} (${TORN_NOME[n-2]})`:"";m.prev=c=>(+c.tornozeleira||0)===n-1;m.prog=c=>Math.min(1,(+c.tornozeleira||0)/n)}
+  else if(m.chain==="lib"){const L=METAS.filter(x=>x.chain==="lib"),j=L.indexOf(m);
+    m.prevLabel=j?`já tem ${L[j-1].label.replace("Liberto: ","")}`:"já tem o Despertar 3";m.prev=c=>pend(c)&&(j?L[j-1].test(c)===true:c.despertar3==="OK");m.prog=c=>{let k=0;while(k<=j&&L[k].test(c)===true)k++;return k/(j+1)}}
+  else if(m.grupo==="Vazio"){const pid=m.id.slice(3),s=c=>c.pecas?.[pid]||c.acess?.[pid];m.prevLabel="já tem a peça Berkas";m.prev=c=>s(c)?.conjunto==="Berkas";m.prog=c=>({Vazio:1,Berkas:.5}[s(c)?.conjunto]||0)}
+  else{const ant={sr:["está Parcial",c=>c.sr==="Parcial"],despertar2:["já tem o Despertar 1",c=>c.despertar1==="OK"],despertar3:["já tem o Despertar 2",c=>c.despertar2==="OK"]}[m.id];
+    if(ant){m.prevLabel=ant[0];m.prev=c=>pend(c)&&ant[1](c)}m.prog=c=>{const t=m.test(c);return t===true?1:t==="parcial"||(ant&&ant[1](c))?.5:0}}
+  if(m.prevLabel==="")delete m.prevLabel});
+
+/* ---------------- Estado ---------------- */
+const S = {view:"painel",charId:null,tab:"geral",draft:null,dirty:false,uid:null,admin:false,cfg:null,chars:{},hist:{},players:{},guild:{},
+  ready:false,noDb:false,filtro:"",rank:"meus",histChar:null,pedra:{cor:"Vermelha",pontas:"6"},imp:null,print:null,toast:"",canImg:false,newChar:null};
+try{S.painel={quem:"todos",ord:"padrao",...JSON.parse(localStorage.getItem("gc-painel")||"{}")}}catch{S.painel={quem:"todos",ord:"padrao"}}
+let db=null,userCap=null,assets=null,sample=null,downloads=null;
+const guildSubs={};
+
+/* ---------------- Utilidades ---------------- */
+function slug(s){return norm(s).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"x"}
+function norm(s){return String(s??"").normalize("NFD").replace(/[̀-ͯ]/g,"").trim().toUpperCase()}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function tierLvl(t){return TIER_LVL[norm(t)]??0}
+function tierKey(t){return norm(t).replace(/\s/g,"")||"NENHUM"}
+function fmtAT(v){return v==null||v===""?"—":`${Math.round(+v).toLocaleString("pt-BR")} K`}
+function fmtNum(v,d){if(v==null||v==="")return"";return (+v).toLocaleString("pt-BR",{minimumFractionDigits:d,maximumFractionDigits:d})}
+function parseNum(v){if(v==null)return null;if(typeof v==="number")return isFinite(v)?v:null;const s=String(v).trim().replace(/\s*K$/i,"").replace(/\./g,"").replace(",",".");if(s==="")return null;const n=+s;return isFinite(n)?n:null}
+function parseNumLoose(v){if(typeof v==="number")return v;if(v==null)return null;let s=String(v).trim().replace("%","");if(s.includes(","))s=s.replace(/\./g,"").replace(",",".");const n=parseFloat(s);return isFinite(n)?n:null}
+function clone(o){return JSON.parse(JSON.stringify(o??null))}
+function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+function getPath(o,p){return p.split(".").reduce((a,k)=>a==null?undefined:a[k],o)}
+function setPath(o,p,v){const ks=p.split(".");let a=o;for(let i=0;i<ks.length-1;i++){if(a[ks[i]]==null||typeof a[ks[i]]!=="object")a[ks[i]]=/^\d+$/.test(ks[i+1])?[]:{};a=a[ks[i]]}a[ks.at(-1)]=v}
+const ICON_CAM='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+
+function catalog(){const c=(S.cfg?.chars?.length?S.cfg.chars:DEFAULT_CHARS).filter(x=>x.ativo!==false);return [...c].sort((a,b)=>(a.ordem??99)-(b.ordem??99))}
+function catalogAll(){return [...(S.cfg?.chars?.length?S.cfg.chars:DEFAULT_CHARS)].sort((a,b)=>(a.ordem??99)-(b.ordem??99))}
+function catById(id){return catalogAll().find(c=>c.id===id)}
+function vazioRef(){return S.cfg?.vazio?.length?S.cfg.vazio:DEFAULT_VAZIO}
+/* nos acessórios do Vazio, Ataque pelas Costas vale a metade dos equipamentos (0,50 ~ 2,50) */
+const ACESS_FAIXA = {"ATAQUE COSTAS":{min:0.5,max:2.5,fator:0.5}};
+function refProp(key,acess=false){const r=vazioRef().find(x=>norm(x.nome)===norm(key));const o=acess&&ACESS_FAIXA[norm(key)];
+  return r&&o?{...r,min:o.min,max:o.max,berkas:Math.round(r.berkas*o.fator*100)/100}:r}
+function foraFaixa(v,min,max){return v!=null&&v!==""&&min!=null&&max!=null&&(+v<min-1e-9||+v>max+1e-9)}
+function cartas(group){return S.cfg?.cartas?.[group]||DEFAULT_CARTAS[group]}
+function inkFor(hex){const m=/^#?([0-9a-f]{6})$/i.exec(hex||"");if(!m)return "#161A25";const n=parseInt(m[1],16);const lin=c=>{c/=255;return c<=.03928?c/12.92:((c+.055)/1.055)**2.4};
+  const L=.2126*lin(n>>16&255)+.7152*lin(n>>8&255)+.0722*lin(n&255);return (L+.05)/(.012+.05)>=(1.05)/(L+.05)?"#161A25":"#FFFFFF"}
+function inkOf(ch){return ch?.texto==="preto"?"#161A25":ch?.texto==="branco"?"#FFFFFF":inkFor(ch?.cor)}
+function idStyle(ch){return ch?.cor?` style="--cc:${esc(ch.cor)};--cc-ink:${inkOf(ch)}"`:""}
+function tdot(t){return `<span class="tdot tier ${tierKey(t)}" title="${esc(TIER_LABEL[t]||t)}" aria-label="${esc(TIER_LABEL[t]||t)}">◆</span>`}
+function idCls(ch){return ch?.cor?" id":""}
+function avatar(ch,cls=""){ if(ch?.id&&ICONES.has(ch.id)) return `<img class="av ${cls}" src="icons/${esc(ch.id)}.webp" alt="${esc(ch.nome)}">`; return`<span class="av ${cls}" aria-hidden="true">${esc((ch?.nome||"?").slice(0,2))}</span>` }
+
+function emptyChar(){const c={lv:null,at:null,brinco:"Nenhum",piercing:"Nenhum",anel:0,titulo:"",tornozeleira:0,sr:"Não",colar:"Não",despertar1:"Não",despertar2:"Não",despertar3:"Não",liberto:"Não",nos:{g1:{},g2:{},g3:{},g4:{}},pecas:{},acess:{},pet:{nome:"",pedras:{}}};
+  EQUIP.forEach(p=>c.pecas[p.id]={conjunto:"Nenhum",ct:null,rf:null,pr:null,cartas:["","","",""],props:{}});
+  ACESS.forEach(p=>c.acess[p.id]={conjunto:"Nenhum",nivel:null,props:{}});return c}
+function fullChar(doc){const c=emptyChar();if(!doc)return c;const d=clone(doc);
+  Object.assign(c,{...d,pecas:c.pecas,acess:c.acess,pet:{nome:d.pet?.nome||"",pedras:{...(d.pet?.pedras||{})}}});
+  EQUIP.forEach(p=>{const s=d.pecas?.[p.id];if(s){Object.assign(c.pecas[p.id],s);const cs=[...(s.cartas||[])];while(cs.length<4)cs.push("");c.pecas[p.id].cartas=cs.slice(0,4);c.pecas[p.id].props={...(s.props||{})}}});
+  ACESS.forEach(p=>{if(d.acess?.[p.id]){Object.assign(c.acess[p.id],d.acess[p.id]);c.acess[p.id].props={...(d.acess[p.id].props||{})}}});
+  c.nos={};["g1","g2","g3"].forEach(g=>{c.nos[g]={};["criacao","destruicao","harmonia"].forEach(k=>{const v=noVal(d.nos?.[g]?.[k]);if(v.attr||v.v!=null||v.q)c.nos[g][k]={attr:v.attr||"",v:v.v??null,q:v.q||""}})});if(!c.despertar1)c.despertar1="Não";if(!c.liberto)c.liberto="Não";
+  c.nos.g4={};LIB.forEach(n=>{const x=d.nos?.g4?.[n.k];if(!n.tipo){if(x==="OK")c.nos.g4[n.k]="OK";return}const v=noVal(x);if(v.attr||v.v!=null||v.q)c.nos.g4[n.k]={attr:v.attr||"",v:v.v??null,q:v.q||""}});
+  if(Array.isArray(d.joias))c.joias=d.joias.map(j=>({tipo:j.tipo==="Piercing"?"Piercing":"Brinco",tier:j.tier||"RARO",equipado:!!j.equipado}));else delete c.joias;return c}
+function charOf(id){return fullChar(S.chars[id])}
+function metasOf(c){return METAS.map(m=>({...m,ok:m.test(c)}))}
+function progress(c){const ms=metasOf(c);const ok=ms.filter(m=>m.ok===true).length;return {ok,total:ms.length,pct:Math.round(ok/ms.length*100)}}
+function nextSteps(c){const ms=metasOf(c),out=[],seen=new Set();
+  for(const m of ms){if(m.ok===true)continue;if(m.chain){if(seen.has(m.chain))continue;seen.add(m.chain)}if(m.grupo==="Vazio"||m.grupo==="Manual")continue;
+    const lb=m.short?`Tornozeleira (${m.short})`:m.label;out.push(m.tier?{label:lb,tier:m.tier}:lb)}
+  const vz=ms.filter(m=>m.grupo==="Vazio"&&m.ok!==true);if(vz.length)out.push({label:vz.length<=2?vz.map(m=>m.label).join(", "):`Vazio: faltam ${vz.length} peças`,tier:"ANCESTRAL"});
+  ms.filter(m=>m.grupo==="Manual"&&m.ok!==true).forEach(m=>out.push(m.label+(m.ok==="parcial"?" (parcial)":"")));return out}
+function indicator(val,key,acess=false){if(val==null||val==="")return "";const r=refProp(key,acess);if(!r)return "";const v=+val;
+  if(foraFaixa(v,r.min,r.max))return `<span class="ind bad" title="Fora da faixa (${r.min} ~ ${r.max})">!</span>`;
+  if(v>=r.max-1e-9)return '<span class="ind star" title="Valor máximo">★</span>';
+  if(v>r.berkas)return '<span class="ind up" title="Acima do Berkas">▲</span>';
+  if(v<r.berkas)return '<span class="ind down" title="Abaixo do Berkas">▼</span>';return '<span class="ind" title="Igual ao Berkas">=</span>'}
+function toast(msg){S.toast=msg;renderOverlay();clearTimeout(toast.t);toast.t=setTimeout(()=>{S.toast="";renderOverlay()},2600)}
+
+/* ---------------- Views ---------------- */
+const PSORT = {
+  nome:{v:r=>r.ch.nome,first:"asc"}, at:{v:r=>+r.c.at||0,first:"desc"},
+  brinco:{v:r=>ATTR_LVL[norm(r.c.brinco)]||0,first:"desc"}, piercing:{v:r=>ATTR_LVL[norm(r.c.piercing)]||0,first:"desc"},
+  anel:{v:r=>+r.c.anel||0,first:"desc"}, vazio:{v:r=>r.vz,first:"desc"}, metas:{v:r=>r.p.ok,first:"desc"}
+};
+try{S.psort=JSON.parse(localStorage.getItem("gc-psort")||"null")||{}}catch{S.psort={}}
+function setPsort(k){const s=S.psort||{};let n;
+  if(!k||!PSORT[k])n={};else if(s.k!==k)n={k,d:PSORT[k].first};else if(s.d===PSORT[k].first)n={k,d:s.d==="asc"?"desc":"asc"};else n={};
+  S.psort=n;try{localStorage.setItem("gc-psort",JSON.stringify(n))}catch{}render()}
+const NAV=[["painel","Painel"],["personagens","Personagens"],["ranking","Ranking"],["historico","Histórico"],["pets","Pets"],["inventario","Inventário"],["forja","Forja"],["dados","Dados"]];
+function renderNav(){document.getElementById("nav").innerHTML=NAV.map(([k,l])=>`<button data-act="go" data-v="${k}" aria-current="${S.view===k||(k==="personagens"&&S.view==="char")}">${l}</button>`).join("")}
+/* mantém o foco no mesmo campo depois de redesenhar a tela (Tab entre campos continua funcionando) */
+function focusKey(el){if(!el||el===document.body||!el.matches?.("input,select,textarea,button"))return null;const d=el.dataset||{};
+  if(d.path)return "p:"+d.path;if(d.act)return ["a",d.act,d.id||"",d.r||"",d.k||"",d.cor||"",d.p||"",d.t||"",d.m||""].join("|");return el.id?"i:"+el.id:null}
+function restoreFocus(key){if(!key)return;const el=[...document.querySelectorAll("main input,main select,main textarea,main button,#overlay input,#overlay select,#overlay button")].find(x=>focusKey(x)===key);
+  if(!el)return;try{el.focus({preventScroll:true});if(el.select&&(el.type==="text"||el.type==="number"))el.select()}catch{}}
+function render(){const fk=focusKey(document.activeElement);renderNav();if(S.view==="historico"&&S.uid&&!S.histLoaded)loadHist().then(()=>{if(S.view==="historico")render()});const v=S.needLogin?loginView:(VIEWS[S.view]||VIEWS.painel);document.getElementById("main").innerHTML=v();renderOverlay();if(S.view==="historico"){drawChart();drawMulti()}restoreFocus(fk)}
+
+function hasData(){return Object.keys(S.chars).length>0}
+function importCTA(){return `<div class="panel row between" style="margin-bottom:16px"><div><h3>Comece importando a sua planilha</h3><div class="muted small">Na aba Dados, escolha o arquivo .xlsm do Excel. Todos os personagens, cartas, Vazio e pets entram de uma vez.</div></div><button class="btn primary" data-act="go" data-v="dados">Importar planilha</button></div>`}
+
+const VIEWS={
+painel(){const cs=catalog();const docs=cs.map(ch=>({ch,c:charOf(ch.id)}));
+  const totAT=docs.reduce((a,x)=>a+(+x.c.at||0),0);const pr=docs.map(x=>progress(x.c));const ok=pr.reduce((a,p)=>a+p.ok,0),tot=pr.reduce((a,p)=>a+p.total,0);
+  const top=[...docs].sort((a,b)=>(+b.c.at||0)-(+a.c.at||0))[0];
+  const opts=METAS.map(m=>`<option value="${m.id}" ${S.filtro===m.id?"selected":""}>${esc(m.label)}</option>`).join("");
+  const P=S.painel,m=S.filtro?METAS.find(x=>x.id===S.filtro):null,anterior=!!(m?.prevLabel&&P.quem==="anterior");
+  let list=docs.map((x,i)=>({...x,i,prog:m?m.prog(x.c):progress(x.c).pct/100}));
+  if(m)list=list.filter(x=>m.test(x.c)!==true&&(!anterior||m.prev(x.c)));
+  if(P.ord==="at")list.sort((a,b)=>(+b.c.at||0)-(+a.c.at||0)||a.i-b.i);
+  else if(P.ord==="perto")list.sort((a,b)=>b.prog-a.prog||(+b.c.at||0)-(+a.c.at||0)||a.i-b.i);
+  const selP=(act,opts,v)=>`<select data-act="${act}">${opts.map(([k,l])=>`<option value="${k}" ${v===k?"selected":""}>${esc(l)}</option>`).join("")}</select>`;
+  return `${hasData()?"":importCTA()}
+  <div class="stats">
+    <div class="stat"><span>AT somado</span><b>${fmtAT(totAT)}</b></div>
+    <div class="stat"><span>Metas cumpridas</span><b>${tot?Math.round(ok/tot*100):0}%</b><div class="muted small num">${ok} de ${tot}</div></div>
+    <div class="stat"><span>Maior AT</span><b style="font-size:20px">${top&&top.c.at?esc(top.ch.nome):"—"}</b><div class="muted small">${top&&top.c.at?fmtAT(top.c.at):""}</div></div>
+    <div class="stat"><span>Personagens</span><b>${cs.length}</b></div>
+  </div>
+  <div class="row between" style="margin-bottom:12px;flex-wrap:wrap;gap:10px"><h2>O que fazer agora</h2>
+  <div class="row small muted" style="gap:14px;flex-wrap:wrap;justify-content:flex-end">
+    <label class="row" style="gap:6px">Mostrar quem ainda precisa de
+      <select id="filtro" data-act="filtro"><option value="">— todos —</option>${opts}</select></label>
+    ${m?.prevLabel?`<label class="row" style="gap:6px">Quem${selP("pquem",[["todos","Todos que ainda não têm"],["anterior",`Só quem ${m.prevLabel}`]],P.quem)}</label>`:""}
+    <label class="row" style="gap:6px">Ordenar por${selP("pord",[["padrao","Padrão (ordem dos personagens)"],["at","AT (maior primeiro)"],["perto",m?"Perto de atingir":"Perto de atingir (progresso geral)"]],P.ord)}</label>
+    ${m?`<span>${list.length} personage${list.length===1?"m":"ns"}</span>`:""}</div></div>
+  ${list.length?`<div class="cards">${list.map(({ch,c})=>{const p=progress(c),ns=nextSteps(c);
+    return `<button class="card${idCls(ch)}"${idStyle(ch)} data-act="open" data-id="${ch.id}"><div class="hd">${avatar(ch)}<div><h3>${esc(ch.nome)}</h3><div class="small muted num">${p.ok}/${p.total} metas</div></div><div class="at">${fmtAT(c.at)}<small>AT</small></div></div>
+    <div class="bar"><i style="width:${p.pct}%"></i></div>
+    <div class="chips">${ns.length?ns.slice(0,5).map(n=>typeof n==="object"?`<span class="chip next tb-${tierKey(n.tier)}">${tdot(n.tier)}${esc(n.label)}</span>`:`<span class="chip next">${esc(n)}</span>`).join("")+(ns.length>5?`<span class="chip no">+${ns.length-5}</span>`:""):'<span class="chip ok">Tudo em dia</span>'}</div></button>`}).join("")}</div>`
+  :`<div class="panel empty">${anterior?`Nenhum personagem que ainda precisa dessa meta ${esc(m.prevLabel)}.`:"Todos os personagens já cumpriram essa meta."}</div>`}`},
+
+personagens(){const base=catalog();const rows=base.map((ch,i)=>{const c=charOf(ch.id),p=progress(c);const vz=EQUIP.filter(x=>!x.only2).filter(x=>c.pecas[x.id].conjunto==="Vazio").length;return {ch,c,p,vz,i}});
+  const s=S.psort||{};const col=PSORT[s.k];
+  if(col){rows.sort((a,b)=>{const va=col.v(a),vb=col.v(b);const r=typeof va==="string"?va.localeCompare(vb,"pt-BR"):(va??-1)-(vb??-1);return (s.d==="asc"?r:-r)||a.i-b.i})}
+  const th=(k,label,cls="")=>{const on=s.k===k;return `<th class="${cls}" aria-sort="${on?(s.d==="asc"?"ascending":"descending"):"none"}"><button class="thsort ${on?"on":""}" data-act="psort" data-k="${k}" title="Ordenar por ${label}">${label}<span class="seta">${on?(s.d==="asc"?"▲":"▼"):"↕"}</span></button></th>`};
+  return `${hasData()?"":importCTA()}<div class="row between" style="margin-bottom:12px"><h2>Personagens</h2><span class="muted small">${base.length} personagens · clique no nome da coluna para ordenar · clique na linha para editar${col?` · <button class="btn ghost small" data-act="psort" data-k="">ordem do cadastro</button>`:""}</span></div>
+  <div class="tablebox"><table><thead><tr><th></th>${th("nome","Personagem")}${th("at","AT","num")}${th("brinco","Brinco")}${th("piercing","Piercing")}${th("anel","Anel","num")}${th("vazio","Vazio","num")}${th("metas","Metas")}</tr></thead><tbody>
+  ${rows.map(({ch,c,p,vz})=>`<tr style="cursor:pointer" data-act="open" data-id="${ch.id}"><td>${avatar(ch,"sm")}</td><td><b>${esc(ch.nome)}</b></td><td class="num">${fmtAT(c.at)}</td>
+    <td class="tier ${tierKey(c.brinco)}">${esc(TIER_LABEL[c.brinco]||c.brinco)}</td><td class="tier ${tierKey(c.piercing)}">${esc(TIER_LABEL[c.piercing]||c.piercing)}</td>
+    <td class="num" title="${esc(anelNome(c.anel))}">${fmtNum(c.anel,1)||"—"}</td><td class="num">${vz}/7</td><td><div class="row" style="gap:8px;flex-wrap:nowrap"><div class="bar" style="width:90px"><i style="width:${p.pct}%"></i></div><span class="small muted num">${p.ok}/${p.total}</span></div></td></tr>`).join("")}
+  </tbody></table></div>`},
+
+char(){const ch=catById(S.charId);if(!ch){S.view="personagens";return VIEWS.personagens()}const c=S.draft,p=progress(c);
+  const tabs=[["geral","Geral"],["equip","Equipamentos e cartas"],["vazio","Vazio"],["despertar","Despertar"],["pet","Pet"],["inventario","Inventário"],["metas","Metas"]];
+  return `<div class="charhd${idCls(ch)}"${idStyle(ch)}><button class="btn ghost" data-act="go" data-v="personagens" aria-label="Voltar">←</button>${avatar(ch,"lg")}
+    <div class="meta"><h2>${esc(ch.nome)}</h2><span class="muted num">${fmtAT(c.at)} · ${p.ok}/${p.total} metas</span></div>
+    <div class="charnav" style="margin-left:auto">
+      <button class="btn" data-act="charnav" data-d="-1" aria-label="Personagem anterior" title="Anterior (←)">‹</button>
+      <select data-act="charjump" aria-label="Ir para o personagem">${catalog().map(x=>`<option value="${x.id}" ${x.id===ch.id?"selected":""}>${esc(x.nome)}</option>`).join("")}</select>
+      <button class="btn" data-act="charnav" data-d="1" aria-label="Próximo personagem" title="Próximo (→)">›</button>
+    </div>
+    <button class="btn primary" data-act="printopen">${ICON_CAM} Ler print</button></div>
+  <div class="tabs" role="tablist">${tabs.map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}</button>`).join("")}</div>
+  ${CHARTABS[S.tab](ch,c)}`},
+
+ranking(){const tabs=`<div class="tabs"><button aria-selected="${S.rank==="meus"}" data-act="rank" data-t="meus">Meus personagens</button><button aria-selected="${S.rank==="guilda"}" data-act="rank" data-t="guilda">Guilda</button></div>`;
+  let rows=[];
+  if(S.rank==="meus"){rows=catalog().map(ch=>({ch,c:charOf(ch.id),who:""}))}
+  else{const pids=Object.keys(S.players);for(const pid of pids){const cs=pid===S.uid?S.chars:(S.players[pid]?.resumo||{});for(const [id,doc] of Object.entries(cs)){const ch=catById(id);if(ch)rows.push({ch,c:fullChar(doc),who:S.players[pid]?.nick||(pid===S.uid?"você":"Jogador")})}}
+    if(!pids.includes(S.uid||""))for(const [id,doc] of Object.entries(S.chars)){const ch=catById(id);if(ch)rows.push({ch,c:fullChar(doc),who:"você"})}}
+  rows=rows.filter(r=>r.c.at).sort((a,b)=>(+b.c.at)-(+a.c.at));
+  return `<h2 style="margin-bottom:12px">Ranking por AT</h2>${tabs}
+  ${rows.length?`<div class="tablebox"><table><thead><tr><th class="num">#</th><th></th><th>Personagem</th>${S.rank==="guilda"?"<th>Jogador</th>":""}<th class="num">AT</th><th>Brinco</th><th>Piercing</th><th class="num">Anel</th><th>Título</th></tr></thead><tbody>
+  ${rows.map((r,i)=>`<tr><td class="num muted">${i+1}</td><td>${avatar(r.ch,"sm")}</td><td><b>${esc(r.ch.nome)}</b></td>${S.rank==="guilda"?`<td>${esc(r.who)}</td>`:""}<td class="num"><b>${fmtAT(r.c.at)}</b></td>
+  <td class="tier ${tierKey(r.c.brinco)}">${esc(TIER_LABEL[r.c.brinco]||r.c.brinco)}</td><td class="tier ${tierKey(r.c.piercing)}">${esc(TIER_LABEL[r.c.piercing]||r.c.piercing)}</td><td class="num" title="${esc(anelNome(r.c.anel))}">${fmtNum(r.c.anel,1)}</td><td>${esc(r.c.titulo)}</td></tr>`).join("")}</tbody></table></div>`
+  :`<div class="panel empty">${S.rank==="guilda"?"Ainda não há outros jogadores. Quando alguém do clã entrar pelo link com a conta Google e salvar os personagens, eles aparecem aqui.":"Preencha o AT dos personagens para ver o ranking."}</div>`}`},
+
+historico(){const cs=catalog().filter(ch=>S.hist[ch.id]?.pontos?.length);if(!S.histChar||(S.histChar!=="todos"&&!S.hist[S.histChar]))S.histChar=cs.length?"todos":null;
+  const todos=S.histChar==="todos";const ch=todos?null:catById(S.histChar),pts=todos?[]:(S.hist[S.histChar]?.pontos||[]);
+  const sel=`<label class="row small muted">Personagem <select data-act="histchar">${cs.length?`<option value="todos" ${todos?"selected":""}>Todos (conta inteira)</option>`:""}${cs.map(c=>`<option value="${c.id}" ${c.id===S.histChar?"selected":""}>${esc(c.nome)}</option>`).join("")}</select></label>`;
+  const aviso=`<div class="panel small" style="margin-bottom:12px;border-left:3px solid var(--label)"><b style="color:var(--label)">Como o histórico funciona:</b> fica <b>um registro por dia</b> para cada personagem. Se você salvar o AT várias vezes no mesmo dia, vale o <b>último valor salvo naquele dia</b>; os anteriores do mesmo dia são substituídos. Um dia só ganha registro quando o AT ou as metas cumpridas mudam.</div>`;
+  const topo=`<div class="row between" style="margin-bottom:12px"><h2>Histórico</h2>${sel}</div>${aviso}`;
+  if(!cs.length)return topo+`<div class="panel empty">O histórico começa no primeiro salvamento ou importação. A cada dia com mudança, o AT e as metas cumpridas ficam registrados.</div>`;
+  if(todos){const T=histTodos();const sinal=v=>(v>0?"+":"")+Math.round(v).toLocaleString("pt-BR");
+    return topo+`<div class="panel sect"><div class="row between"><h3>AT somado da conta</h3><span class="muted small">${T.serie.length} dia${T.serie.length>1?"s":""} com registro · ${T.linhas.length} personagens</span></div>
+     <div class="chart" id="chart"></div>
+     <div class="muted small">Em cada dia, cada personagem entra com o último AT registrado até aquele dia.${T.serie.length<2?" Com um único dia de registro ainda não há linha.":""}</div></div>
+     <div class="panel sect" style="margin-top:12px"><div class="row between"><h3>Variação de AT por personagem</h3>
+       <div class="row small" style="gap:6px">
+         <button class="btn ghost small" data-act="histvis" data-v="all">Mostrar todos</button><button class="btn ghost small" data-act="histvis" data-v="none">Esconder todos</button></div></div>
+      <div class="chart" id="chart2"></div>
+      <div class="legenda">${T.linhas.map(l=>l.ch).sort((a,b)=>(a.ordem??99)-(b.ordem??99)).map(c=>`<button class="leg ${S.histOff.has(c.id)?"off":""}" data-act="histtog" data-id="${c.id}" aria-pressed="${!S.histOff.has(c.id)}"><span class="legend-dot" style="background:${esc(corChar(c))}"></span>${esc(c.nome)}</button>`).join("")}</div>
+      <div class="muted small">Quanto o AT de cada personagem subiu desde o primeiro registro dele (todos começam no zero). Cada linha usa a cor do personagem cadastrada em Dados. Clique num nome para esconder ou mostrar a linha; passe o mouse no gráfico para ver os valores do dia.</div></div>
+     <div class="tablebox" style="margin-top:12px"><table><thead><tr><th></th><th>Personagem</th><th class="num">Início</th><th class="num">Atual</th><th class="num">Evolução</th><th class="num">%</th><th class="num">Registros</th></tr></thead><tbody>
+     ${T.linhas.map(l=>`<tr style="cursor:pointer" data-act="histopen" data-id="${l.ch.id}"><td>${avatar(l.ch,"sm")}</td><td><b>${esc(l.ch.nome)}</b><div class="muted" style="font-size:11.5px">${l.d0.split("-").reverse().join("/")} → ${l.d1.split("-").reverse().join("/")}</div></td>
+       <td class="num">${fmtAT(l.a0)}</td><td class="num"><b>${fmtAT(l.a1)}</b></td><td class="num" style="color:${l.dv>0?"var(--good)":"var(--muted)"}">${l.dv?sinal(l.dv)+" K":"—"}</td><td class="num" style="color:${l.dv>0?"var(--good)":"var(--muted)"}">${l.a0?(l.dv?sinal(l.dv/l.a0*100)+"%":"—"):"—"}</td><td class="num muted">${l.n}</td></tr>`).join("")}
+     <tr class="tot"><td></td><td><b>Conta</b></td><td class="num">${fmtAT(T.ini)}</td><td class="num"><b>${fmtAT(T.fim)}</b></td><td class="num" style="color:${T.fim-T.ini>0?"var(--good)":"var(--muted)"}"><b>${T.fim-T.ini?sinal(T.fim-T.ini)+" K":"—"}</b></td><td class="num">${T.ini&&T.fim-T.ini?sinal((T.fim-T.ini)/T.ini*100)+"%":"—"}</td><td></td></tr>
+     </tbody></table></div><div class="muted small" style="margin-top:6px">Clique num personagem para ver o gráfico dele.</div>`}
+  return topo+`<div class="panel sect"><div class="row between"><h3>AT de ${esc(ch.nome)}</h3><span class="muted small">${pts.length} registro${pts.length>1?"s":""}</span></div>
+   <div class="chart" id="chart"></div>
+   ${pts.length<2?'<div class="muted small">Com um único registro ainda não há linha. O gráfico aparece a partir da próxima mudança, em outro dia.</div>':""}</div>
+   <div class="tablebox" style="margin-top:12px"><table><thead><tr><th>Data</th><th class="num">AT</th><th class="num">Variação</th><th class="num">Metas</th></tr></thead><tbody>
+   ${[...pts].reverse().map((p,i,arr)=>{const prev=arr[i+1];const dv=prev?(p.at-prev.at):null;return `<tr><td class="num">${p.d.split("-").reverse().join("/")}</td><td class="num">${fmtAT(p.at)}</td><td class="num ${dv>0?"":"muted"}" style="${dv>0?"color:var(--good)":""}">${dv==null?"—":(dv>0?"+":"")+Math.round(dv).toLocaleString("pt-BR")+" K"}</td><td class="num">${p.ok}/${p.total}</td></tr>`}).join("")}</tbody></table></div>`},
+pets(){const cor=S.pedra.cor,pts=+S.pedra.pontas;const cs=catalog().map(ch=>({ch,c:charOf(ch.id)}));
+  const cand=cs.map(x=>({...x,v:+x.c.pet.pedras[cor]||0})).filter(x=>x.v<pts).sort((a,b)=>a.v-b.v||(+b.c.at||0)-(+a.c.at||0));
+  return `<h2 style="margin-bottom:12px">Pets</h2>
+  <div class="panel sect" style="margin-bottom:16px"><h3>Ganhei uma pedra</h3>
+   <div class="row"><label class="f">Cor<select data-act="pedra" data-k="cor">${CORES.map(([n])=>`<option ${n===cor?"selected":""}>${n}</option>`).join("")}</select></label>
+   <label class="f">Tipo<select data-act="pedra" data-k="pontas">${PEDRAS.map(([n,l])=>`<option value="${n}" ${n===pts?"selected":""}>${l}</option>`).join("")}</select></label>
+   <span class="muted small">${esc(CORES.find(x=>x[0]===cor)[2])}</span></div>
+   ${cand.length?`<div class="chips">${cand.map((x,i)=>`<span class="chip ${i<3?"next":"no"}">${esc(x.ch.nome)} · ${x.v?`tem ${tipoPedra(x.v)}`:"vazio"}</span>`).join("")}</div>
+   <div class="muted small">Ordenado por quem ganha mais com ela: espaço vazio primeiro, depois Triangular, depois Losangular. Empate: maior AT.</div>`
+   :`<div class="muted">Nenhum personagem melhora com essa pedra.</div>`}</div>
+  <div class="tablebox"><table><thead><tr><th></th><th>Personagem</th><th>Pet</th>${CORES.map(([n,hex,b])=>`<th title="${esc(b)}"><span class="legend-dot" style="background:${hex}"></span>${n}</th>`).join("")}<th class="num">Pedras</th></tr></thead><tbody>
+  ${cs.map(({ch,c})=>{return `<tr><td>${avatar(ch,"sm")}</td><td><b>${esc(ch.nome)}</b></td><td>${esc(c.pet.nome)||'<span class="muted">—</span>'}</td>
+    ${CORES.map(([n])=>{const v=+c.pet.pedras[n]||0;const hl=n===cor&&v<pts;return `<td style="${hl?"background:var(--partial-soft)":""}"><select data-act="petstone" data-id="${ch.id}" data-cor="${n}" aria-label="${n} de ${esc(ch.nome)}"><option value="">—</option>${PEDRAS.map(([k,l])=>`<option value="${k}" ${v===k?"selected":""}>${l}</option>`).join("")}</select></td>`}).join("")}
+    <td class="num">${CORES.filter(([n])=>c.pet.pedras[n]).length}/5</td></tr>`}).join("")}</tbody></table></div>`},
+
+dados(){const imp=S.imp;return `<h2 style="margin-bottom:12px">Dados</h2><div class="sect">
+  <div class="panel sect"><h3>Importar planilha</h3>
+   <div class="muted small">Aceita a planilha automatizada (.xlsm) e os arquivos exportados daqui (.xlsx). Nada é gravado antes de você conferir a prévia.</div>
+   <div class="row"><input type="file" id="impfile" accept=".xlsx,.xlsm,.xls" data-act="impfile"></div>
+   ${imp?.status==="loading"?'<div class="muted">Lendo a planilha…</div>':""}
+   ${imp?.error?`<div style="color:var(--t-caos)">${esc(imp.error)}</div>`:""}
+   ${imp?.preview?`<div class="sect"><div><b>${imp.preview.length}</b> personagens encontrados · <b>${imp.preview.filter(x=>x.changes>0).length}</b> com mudanças</div>
+     ${imp.warnings.length?`<div class="small" style="color:var(--partial)">${imp.warnings.map(esc).join("<br>")}</div>`:""}
+     <div class="chips">${imp.preview.map(x=>`<span class="chip ${x.changes?"next":"no"}">${esc(x.nome)}${x.changes?` · ${x.changes} campo${x.changes>1?"s":""}`:" · igual"}</span>`).join("")}</div>
+     <div class="row"><button class="btn primary" data-act="impsave" ${imp.saving?"disabled":""}>${imp.saving?`Gravando ${imp.done}/${imp.preview.length}…`:"Gravar no sistema"}</button><button class="btn" data-act="impcancel">Cancelar</button></div></div>`:""}
+  </div>
+  <div class="panel sect"><h3>Exportar planilha</h3><div class="muted small">Gera um .xlsx com as abas Controle, O Que Fazer, Cartas, Vazio, Pets, Despertar e Inventário, no mesmo formato da sua planilha. Ele pode ser importado de volta. Imagens e fórmulas da .xlsm automatizada não vão no arquivo.</div>
+   <div class="row"><button class="btn" data-act="export" ${downloads?"":"disabled"}>Exportar .xlsx</button>${downloads?"":'<span class="muted small">Exportação indisponível nesta visualização.</span>'}</div></div>
+  <div class="panel sect"><h3>Seu nick no jogo</h3><div class="muted small">Aparece no ranking da guilda.</div>
+   <div class="row"><input type="text" id="nick" value="${esc(S.players[S.uid]?.nick||"")}" placeholder="ex.: CrimsonStorm" maxlength="40"><button class="btn" data-act="nick">Salvar nick</button></div></div>
+  ${contaPanel()}
+  ${S.admin?catalogAdmin()+recursosAdmin():""}
+  </div>`}
+};
+
+function catalogAdmin(){const cs=catalogAll();const n=S.newChar;
+  return `<div class="panel sect"><div class="row between"><h3>Cadastro de personagens</h3><button class="btn" data-act="newchar">Novo personagem</button></div>
+   <div class="muted small">Quando o jogo lançar um personagem novo, cadastre aqui. Ele passa a aparecer em todas as telas e na importação/exportação.</div>
+   ${n?`<div class="panel sect" style="background:var(--surface-2)"><div class="row">
+     <label class="f">Nome<input type="text" id="nc_nome" value="${esc(n.nome)}" maxlength="30"></label>
+     <label class="f">Imagem<input type="file" id="nc_img" accept="image/png,image/jpeg,image/webp,image/gif" ${assets?"":"disabled"}></label>
+     <label class="f">Cor do card<input type="color" id="nc_cor" value="${esc(n.cor||"#8A90A2")}"></label>
+     <label class="f">Texto<select id="nc_texto"><option value="auto">Automático</option><option value="preto">Preto</option><option value="branco">Branco</option></select></label>
+     <label class="row small"><input type="checkbox" id="nc_a2" ${n.arma2?"checked":""}> Tem segunda arma</label></div>
+     <div class="row"><button class="btn primary" data-act="ncsave" ${n.saving?"disabled":""}>${n.saving?"Salvando…":"Cadastrar"}</button><button class="btn" data-act="nccancel">Cancelar</button>${n.error?`<span style="color:var(--t-caos)" class="small">${esc(n.error)}</span>`:""}</div></div>`:""}
+   <div class="tablebox"><table><thead><tr><th></th><th>Nome</th><th>Cor do card</th><th>Texto</th><th>2ª arma</th><th>Ativo</th><th>Ordem</th><th>Imagem</th></tr></thead><tbody>
+   ${cs.map((c,i)=>`<tr><td>${avatar(c,"sm")}</td><td><b>${esc(c.nome)}</b></td>
+     <td><input type="color" data-act="catcolor" data-id="${c.id}" value="${esc(c.cor||"#8A90A2")}" aria-label="Cor do card de ${esc(c.nome)}">${c.cor?"":' <span class="muted small">sem cor</span>'}</td>
+     <td><span class="row" style="gap:6px;flex-wrap:nowrap"><select data-act="cattexto" data-id="${c.id}" aria-label="Cor do texto de ${esc(c.nome)}">${[["auto","Automático"],["preto","Preto"],["branco","Branco"]].map(([v,l])=>`<option value="${v}" ${(c.texto||"auto")===v?"selected":""}>${l}</option>`).join("")}</select>${c.cor?`<span class="chip" style="background:${esc(c.cor)};color:${inkOf(c)}">${esc(c.nome)}</span>`:""}</span></td>
+     <td><input type="checkbox" data-act="catflag" data-id="${c.id}" data-k="arma2" ${c.arma2?"checked":""} aria-label="Segunda arma"></td>
+     <td><input type="checkbox" data-act="catflag" data-id="${c.id}" data-k="ativo" ${c.ativo!==false?"checked":""} aria-label="Ativo"></td>
+     <td><button class="btn ghost" data-act="catmove" data-id="${c.id}" data-d="-1" ${i===0?"disabled":""} aria-label="Subir">↑</button><button class="btn ghost" data-act="catmove" data-id="${c.id}" data-d="1" ${i===cs.length-1?"disabled":""} aria-label="Descer">↓</button></td>
+     <td><label class="btn ghost small" style="cursor:pointer">Trocar<input type="file" hidden accept="image/png,image/jpeg,image/webp,image/gif" data-act="catimg" data-id="${c.id}" ${assets?"":"disabled"}></label></td></tr>`).join("")}
+   </tbody></table></div></div>`}
+
+/* ---------- nós do despertar ---------- */
+/* faixas de valor tiradas da janela "Núcleo de Apoio" do jogo: [atributo, mín, máx, é %] */
+const NO_TIPOS = {
+  criacao:{label:"Nó de Criação",titulo:"Núcleo de Apoio da Criação",faixas:[["Ataque",104,500,0],["Defesa",152,350,0],["HP",152,350,0],["Ataque Especial",107,800,0],["Defesa Especial",164,560,0],["Recuperação de HP",3.12,15,1],["Recuperação de MP / AP",1.05,6,1],["Resistência a Contaminação",1.04,5,1]]},
+  destruicao:{label:"Nó de Destruição",titulo:"Núcleo de Apoio da Destruição",faixas:[["Chance de Crítico",1.52,3.5,1],["Dano Crítico",10.17,27,1],["Dano de Ataque pelas Costas",1.04,5,1],["Chance de Lança Infernal",0.53,3.5,1],["Dano de Lança Infernal",119,2000,0],["Absorção de HP",103,400,0],["Absorção de MP / AP",103,400,0],["Resistência a Contaminação",1.04,5,1]]},
+  harmonia:{label:"Nó de Harmonia",titulo:"Núcleo de Apoio da Harmonia",faixas:[["Dano de Todas as Habilidades",1.02,3,1],["Dano de Habilidade Normal",1.03,4,1],["Dano de Habilidade de 4ª Barra",1.06,7,1],["Dano de Habilidade do Despertar",1.09,10,1],["Dano Causado a Chefes",1.04,5,1],["Redução de Dano de Chefes",1.04,5,1],["Recuperação de MP do Mascote",1.03,4,1],["Resistência a Contaminação",1.04,5,1]]},
+  /* os nós de Destruição do Despertar Liberto têm outras faixas de Lança Infernal e Absorção */
+  destruicaoL:{label:"Nó de Destruição",titulo:"Núcleo de Apoio da Destruição",faixas:[["Chance de Crítico",1.52,3.5,1],["Dano Crítico",10.17,27,1],["Dano de Ataque pelas Costas",1.04,5,1],["Chance de Lança Infernal",1.04,5,1],["Dano de Lança Infernal",164,560,0],["Absorção de HP",164,560,0],["Absorção de MP / AP",164,560,0],["Resistência a Contaminação",1.04,5,1]]}
+};
+/* Expansão do Despertar – Liberto (atualização de 14/10/2026): 9 núcleos novos na ordem do jogo, pagos com Pedras do Despertar da Liberdade */
+const LIB = [
+  {k:"unidade",nome:"Núcleo Principal da Unidade",efeito:"Ataque +100 · libera a Skill Liberta",custo:50},
+  {k:"criacao1",tipo:"criacao",nome:"Criação 1",efeito:"Ataque +180",custo:40},
+  {k:"indomavel",nome:"Núcleo Principal da Indomabilidade",efeito:"Duração da Skill Liberta +2 s",custo:50},
+  {k:"destruicao1",tipo:"destruicaoL",nome:"Destruição 1",efeito:"Chance de Crítico +1,50%",custo:60},
+  {k:"abundancia",nome:"Núcleo Principal da Abundância",efeito:"Ataque +150 · Skill Liberta +1 uso",custo:70},
+  {k:"criacao2",tipo:"criacao",nome:"Criação 2",efeito:"Ataque +240",custo:60},
+  {k:"persistencia",nome:"Núcleo Principal da Persistência",efeito:"Duração da Skill Liberta +3 s",custo:70},
+  {k:"destruicao2",tipo:"destruicaoL",nome:"Destruição 2",efeito:"Dano Crítico +13,40%",custo:80},
+  {k:"ressonancia",nome:"Núcleo Principal da Ressonância",efeito:"Ataque +200 · Ataque +2,5% ao usar a Skill Liberta",custo:100}];
+const LIB_COLECAO = [[1,"Dano de Habilidade do Despertar +1,5%"],[3,"Ataque Especial +200"],[5,"Dano de Habilidade do Despertar +3,5%"],[10,"Dano Crítico +10%"]];
+function libFeito(c,n){const x=c.nos?.g4?.[n.k];return n.tipo?!!noVal(x).attr:x==="OK"}
+Object.values(NO_TIPOS).forEach(t=>t.attrs=t.faixas.map(f=>f[0]));
+const NO_QUAL = ["Comum","Raro","Épico","Lendário","Ancestral"];
+function noFaixa(tipo,attr){return NO_TIPOS[tipo]?.faixas.find(f=>norm(f[0])===norm(attr))}
+function noVal(v){return typeof v==="string"?{attr:v}:(v||{})}
+/* sinônimos que aparecem na janela do jogo */
+const NO_ALIAS = {"AUMENTO DA CHANCE DE CRITICO":"Chance de Crítico","ACERTO CRITICO":"Chance de Crítico","DANO DE HABILIDADE DE 4ª BARRA":"Dano de Habilidade de 4ª Barra","DANO DA LANCA INFERNAL":"Dano de Lança Infernal","LANCA INFERNAL, DANO":"Dano de Lança Infernal","CHANCE DE LANCA INFERNAL":"Chance de Lança Infernal","RECUPERACAO DE MP/AP":"Recuperação de MP / AP","ABSORCAO DE MP/AP":"Absorção de MP / AP","DANO DE HABILIDADE DE DESPERTAR":"Dano de Habilidade do Despertar","RECUPERACAO DE MP DE MASCOTE":"Recuperação de MP do Mascote"};
+function noAttrMatch(tipo,nome){const n=norm(nome);const a=NO_ALIAS[n];if(a)return a;return NO_TIPOS[tipo]?.attrs.find(x=>norm(x)===n)||null}
+
+/* ---------- brincos e piercings (equipados + inventário) ---------- */
+function joiasPanel(c){const js=joiasOf(c),chk=joiaCheck(js);
+  return `<div class="panel sect" style="margin-top:12px">
+   <div class="row between"><div><h3>Brincos e piercings</h3><div class="muted small">Tudo que o personagem tem, equipado ou no inventário. As metas contam todos.</div></div><button class="btn" data-act="joiaadd">Adicionar</button></div>
+   ${js.length?`<div class="tablebox"><table><thead><tr><th>Tipo</th><th>Item</th><th>Equipado</th><th></th></tr></thead><tbody>
+   ${js.map((j,i)=>{const f=j.tipo==="Piercing"?"piercing":"brinco";return `<tr><td>${sel(`joias.${i}.tipo`,["Brinco","Piercing"],j.tipo)}</td>
+     <td>${sel(`joias.${i}.tier`,tierOpts(f).filter(o=>o[0]!=="Nenhum"),j.tier,"tier "+tierKey(j.tier))}</td>
+     <td><label class="row small" style="gap:6px"><input type="checkbox" data-path="joias.${i}.equipado" ${j.equipado?"checked":""}> ${j.equipado?"Equipado":"No inventário"}</label></td>
+     <td><button class="btn ghost" data-act="joiadel" data-i="${i}" aria-label="Remover">✕</button></td></tr>`}).join("")}</tbody></table></div>`
+   :'<div class="muted">Nenhum brinco ou piercing cadastrado.</div>'}
+   <div class="row small">
+     <span class="chip ${chk.eq>2?"no":"ok"}">${chk.eq}/2 equipados</span>
+     ${chk.set?`<span class="chip ok">Conjunto ativo: ${esc(TIER_LABEL[chk.set]||chk.set)}</span>`:'<span class="muted">Sem conjunto: um brinco e um piercing do mesmo tier (Épico, Lendário ou Caos) formam conjunto.</span>'}
+   </div>
+   ${chk.errs.length?`<div class="small" style="color:var(--t-caos)">${chk.errs.map(esc).join("<br>")}</div>`:""}
+  </div>`}
+
+/* ---------- Despertar Liberto ---------- */
+function libertosConta(){return catalog().filter(ch=>(ch.id===S.charId&&S.draft?S.draft:S.chars[ch.id])?.liberto==="OK").length}
+function libPanel(ch,c,no){const on=c.liberto==="OK",total=LIB.reduce((s,n)=>s+n.custo,0),gasto=LIB.filter(n=>libFeito(c,n)).reduce((s,n)=>s+n.custo,0);
+  const n90=(+c.lv||0)>=90,d3=c.despertar3==="OK",qtd=libertosConta();
+  const ok=b=>`<span class="chip ${b?"ok":"no"}">${b?"✓ ":""}`;
+  const principal=n=>`<div class="no-grande ${c.nos?.g4?.[n.k]==="OK"?"on":""}"><span class="muted small">Nó grande</span><b>${n.nome.replace("Núcleo Principal d","")}</b><span class="ef">${n.efeito} · ${n.custo} pedras</span>
+     <select data-path="nos.g4.${n.k}">${[["","Bloqueado"],["OK","Liberado"]].map(([v,l])=>`<option value="${v}" ${(c.nos?.g4?.[n.k]||"")===v?"selected":""}>${l}</option>`).join("")}</select></div>`;
+  return `<div class="panel sect" style="margin-top:18px">
+   <div class="row between"><div><h3>Expansão do Despertar – Liberto</h3><div class="muted small">Requisitos: Lv 90 e despertar completo. Missão: 18.000 GP (8 missões em cadeia) ou 8.000 VP. Libera a Skill Liberta (tecla V) e 9 núcleos novos, pagos com Pedras do Despertar da Liberdade.</div></div>
+     <label class="f" style="min-width:150px">Situação<select data-path="liberto">${[["Não","Não liberto"],["OK","Liberto"]].map(([v,l])=>`<option value="${v}" ${c.liberto===v?"selected":""}>${l}</option>`).join("")}</select></label></div>
+   <div class="chips">${ok(n90)}Lv 90</span>${ok(d3)}Despertar 3</span>
+     <span class="chip">Pedras da Liberdade: <b>${gasto}</b> de ${total} · faltam <b>${total-gasto}</b></span></div>
+   <div class="trilha ${on?"":"off"}">
+     <div class="no-grande ${d3?"on":""}"><span class="muted small">Início</span><b>Despertar 3</b></div>
+     ${LIB.map(n=>`<div class="seta" aria-hidden="true">›</div>${n.tipo?no("g4",n.k,n.tipo,`<div class="ef muted" style="font-size:12px">${n.efeito} · ${n.custo} pedras</div>`):principal(n)}`).join("")}
+   </div>
+   ${on?"":`<div class="muted small">Marque "Liberto" quando o personagem concluir a missão. Os núcleos podem ser preenchidos mesmo assim.</div>`}
+   <div class="muted small">Trocar só o valor de um núcleo de apoio (o atributo fica): 5 Pedras da Liberdade + 10 Pedras da Transformação por tentativa. O valor só sobe ou fica igual.</div>
+   <div><b class="small">Coleção de Heróis</b> <span class="muted small">· ${qtd} personagem${qtd===1?"":"s"} liberto${qtd===1?"":"s"} na conta</span>
+     <div class="chips" style="margin-top:6px">${LIB_COLECAO.map(([q,b])=>`<span class="chip ${qtd>=q?"ok":"no"}">${qtd>=q?"✓ ":""}${q}: ${b}</span>`).join("")}</div></div>
+  </div>`}
+
+/* ---------- abas do personagem ---------- */
+function sel(path,opts,val,cls=""){if(val!=null&&val!==""&&!opts.some(o=>String(Array.isArray(o)?o[0]:o)===String(val)))opts=[...opts,[val,val]];
+  return `<select data-path="${path}" class="${cls}">${opts.map(o=>{const [v,l]=Array.isArray(o)?o:[o,o];return `<option value="${esc(v)}" ${String(v)===String(val??"")?"selected":""}>${esc(l)}</option>`}).join("")}</select>`}
+function numIn(path,val,step="1",w=""){return `<input type="number" inputmode="decimal" step="${step}" data-path="${path}" data-num="1" value="${val??""}" ${w?`style="width:${w}"`:""}>`}
+const CHARTABS={
+geral(ch,c){return `<div class="panel"><div class="grid-f">
+  <label class="f">Level${numIn("lv",c.lv)}</label>
+  <label class="f">Ataque total (K)${numIn("at",c.at,"1","110px")}</label>
+  <label class="f" style="grid-column:span 2">Anel${sel("anel",ANEL_OPTS,(+c.anel||0).toFixed(1)==="4.0"?4:+(+c.anel||0).toFixed(1))}</label>
+  <label class="f" style="grid-column:span 2">Tornozeleira${sel("tornozeleira",[[0,"Nenhuma"],...TORN.map((l,i)=>[i+1,`${i+1} · ${l} · ${TIER_LABEL[TORN_TIER[i]]}`])],+c.tornozeleira||0,"tier "+(+c.tornozeleira?tierKey(TORN_TIER[+c.tornozeleira-1]):"NENHUM"))}</label>
+  <label class="f">Título<input type="text" data-path="titulo" value="${esc(c.titulo)}" maxlength="40"></label>
+  <label class="f">SR<select data-path="sr">${["Não","Parcial","OK"].map(o=>`<option ${c.sr===o?"selected":""}>${o}</option>`).join("")}</select></label>
+  <label class="f">Colar<select data-path="colar">${["Não","OK"].map(o=>`<option ${c.colar===o?"selected":""}>${o}</option>`).join("")}</select></label>
+  <label class="f">Despertar 2<select data-path="despertar2">${["Não","OK"].map(o=>`<option ${c.despertar2===o?"selected":""}>${o}</option>`).join("")}</select></label>
+  <label class="f">Despertar 3<select data-path="despertar3">${["Não","OK"].map(o=>`<option ${c.despertar3===o?"selected":""}>${o}</option>`).join("")}</select></label>
+  <label class="f">Despertar Liberto<select data-path="liberto">${["Não","OK"].map(o=>`<option ${c.liberto===o?"selected":""}>${o}</option>`).join("")}</select></label>
+  </div></div>
+  ${joiasPanel(c)}`},
+equip(ch,c){const eq=EQUIP.filter(p=>!p.only2||ch.arma2);
+  return `<div class="tablebox"><table><thead><tr><th>Peça</th><th>Conjunto</th><th class="num">CT</th><th class="num">RF</th><th class="num">PR</th><th>Carta 1</th><th>Carta 2</th><th>Carta 3</th><th>Carta 4</th><th></th></tr></thead><tbody>
+  ${eq.map(p=>{const s=c.pecas[p.id];const L=["",...cartas(p.cards)];return `<tr><td><b>${p.label}</b></td><td>${sel(`pecas.${p.id}.conjunto`,CONJ,s.conjunto,"conj "+s.conjunto)}</td>
+   <td>${numIn(`pecas.${p.id}.ct`,s.ct,"1","56px")}</td><td>${numIn(`pecas.${p.id}.rf`,s.rf,"1","56px")}</td><td>${numIn(`pecas.${p.id}.pr`,s.pr,"1","56px")}</td>
+   ${[0,1,2,3].map(i=>`<td>${sel(`pecas.${p.id}.cartas.${i}`,L.map(x=>[x,x||"—"]),s.cartas[i])}</td>`).join("")}
+   <td><button class="btn ghost" data-act="print" data-p="${p.id}" title="Ler print desta peça" aria-label="Ler print desta peça">${ICON_CAM}</button></td></tr>`}).join("")}
+  </tbody></table></div>
+  <h3 style="margin:18px 0 10px">Acessórios</h3>
+  <div class="tablebox"><table><thead><tr><th>Peça</th><th>Conjunto</th><th class="num">Propriedades certas</th></tr></thead><tbody>
+  ${ACESS.map(p=>{const s=c.acess[p.id];return `<tr><td><b>${p.label}</b></td><td>${sel(`acess.${p.id}.conjunto`,CONJ,s.conjunto,"conj "+s.conjunto)}</td><td>${numIn(`acess.${p.id}.nivel`,s.nivel,"1","56px")}</td></tr>`}).join("")}</tbody></table></div>`},
+vazio(ch,c){const eq=EQUIP.filter(p=>!p.only2||ch.arma2);
+  const card=(p,s,base)=>{const off=s.conjunto!=="Vazio";
+   return `<div class="piece cj-${s.conjunto} ${off?"off":""}"><div class="ph"><h3>${p.label}</h3><span class="conj ${s.conjunto} small">${s.conjunto}</span><button class="btn ghost" data-act="print" data-p="${p.id}" title="Ler print" aria-label="Ler print desta peça">${ICON_CAM}</button></div>
+   ${PROPS.map(pr=>{const v=s.props?.[pr.id]||{};const ac=base.startsWith("acess.");const r=refProp(pr.key,ac);return `<div class="prop"><div class="lbl">${pr.label}<small class="num">${r?`${fmtNum(r.min,pr.dec)} ~ ${fmtNum(r.max,pr.dec)} · Berkas ${fmtNum(r.berkas,pr.dec)}`:""}</small></div>
+     <input type="number" inputmode="decimal" step="${pr.dec?"0.01":"1"}" data-path="${base}.props.${pr.id}.v" data-num="1" ${r?`min="${r.min}" max="${r.max}" data-min="${r.min}" data-max="${r.max}"`:""} class="${r&&foraFaixa(v.v,r.min,r.max)?"bad":""}" value="${v.v??""}" aria-label="${pr.label}">
+     ${sel(`${base}.props.${pr.id}.q`,[["","Qualidade"],...QUAL.map(q=>[q,q])],v.q,"q "+(v.q||""))}
+     ${indicator(v.v,pr.key,ac)||'<span class="ind"></span>'}</div>`}).join("")}</div>`};
+  return `<div class="row between" style="margin-bottom:10px"><span class="muted small">▲ acima do Berkas · ▼ abaixo · <span style="color:var(--gold)">★</span> valor máximo do Vazio</span>
+</div>
+  <h3 style="margin:4px 0 10px">Equipamentos</h3>
+  <div class="pieces">${eq.map(p=>card(p,c.pecas[p.id],`pecas.${p.id}`)).join("")}</div>
+  <h3 style="margin:18px 0 10px">Acessórios</h3>
+  <div class="pieces">${ACESS.map(p=>card(p,c.acess[p.id],`acess.${p.id}`)).join("")}</div>`},pet(ch,c){return `<div class="panel"><div class="grid-f">
+  <label class="f">Nome do pet<input type="text" data-path="pet.nome" value="${esc(c.pet.nome)}" maxlength="40"></label>
+  ${CORES.map(([n,hex,b])=>`<label class="f"><span><span class="legend-dot" style="background:${hex}"></span>${n} <span class="muted" style="font-size:12px">· ${b}</span></span>${sel(`pet.pedras.${n}`,[["","Sem pedra"],...PEDRAS],c.pet.pedras[n]??"")}</label>`).join("")}
+  </div></div>`},
+despertar(ch,c){const grupos=[["g1","Despertar 1","despertar1"],["g2","Despertar 2","despertar2"],["g3","Despertar 3","despertar3"]];
+  const no=(g,k,tp=k,extra="")=>{const t=NO_TIPOS[tp],v=noVal(c.nos?.[g]?.[k]),fx=noFaixa(tp,v.attr);const base=`nos.${g}.${k}`;
+    const star=fx&&v.v!=null&&+v.v>=fx[2]-1e-9;
+    return `<div class="dno no-${tp}"><div class="no-hd">${t.label}</div>${extra}
+      ${sel(`${base}.attr`,[["","— não liberado —"],...t.attrs.map(a=>[a,a])],v.attr)}
+      ${v.attr?`<div class="row" style="gap:8px;flex-wrap:nowrap"><input type="number" inputmode="decimal" step="${fx?.[3]?"0.01":"1"}" data-path="${base}.v" data-num="1" ${fx?`min="${fx[1]}" max="${fx[2]}" data-min="${fx[1]}" data-max="${fx[2]}"`:""} class="num ${fx&&foraFaixa(v.v,fx[1],fx[2])?"bad":""}" value="${v.v??""}" aria-label="Valor" style="width:104px;font-size:16px">
+        ${sel(`${base}.q`,[["","Qualidade"],...NO_QUAL.map(q=>[q,q])],v.q,"q "+(v.q||""))}${star?'<span class="ind star" title="Valor máximo">★</span>':""}</div>
+        ${fx?`<div class="muted" style="font-size:11.5px">faixa ${fmtNum(fx[1],fx[3]?2:0)} ~ ${fmtNum(fx[2],fx[3]?2:0)}${fx[3]?"%":""}</div>`:""}`:""}
+    </div>`};
+  return `<div class="row between" style="margin-bottom:10px"><div class="muted small">O caminho do despertar, na ordem do jogo. Em cada nó, escolha o atributo, o valor e a qualidade (a cor do texto no jogo). Os Despertares 2 e 3 contam nas metas.</div>
+   <button class="btn" data-act="printno">${ICON_CAM} Ler print de um nó</button></div>
+  <div class="trilha">
+   <div class="no-grande"><span class="muted small">Início</span><b>Skill de 4ª Barra</b></div>
+   ${grupos.map(([g,label,f])=>`<div class="seta" aria-hidden="true">›</div>
+     ${["criacao","destruicao","harmonia"].map(k=>`${no(g,k)}<div class="seta" aria-hidden="true">›</div>`).join("")}
+     <div class="no-grande ${c[f]==="OK"?"on":""}"><span class="muted small">Nó grande</span><b>${label}</b>
+       <select data-path="${f}">${["Não","OK"].map(o=>`<option value="${o}" ${c[f]===o?"selected":""}>${o==="OK"?"Liberado":"Bloqueado"}</option>`).join("")}</select></div>`).join("")}
+  </div>
+  ${libPanel(ch,c,no)}`},metas(ch,c){const ms=metasOf(c);const grupos=[...new Set(ms.map(m=>m.grupo))];
+  return `<div class="sect">${grupos.map(g=>`<div class="panel"><h3 style="margin-bottom:8px">${g}</h3><div class="chips">${ms.filter(m=>m.grupo===g).map(m=>`<span class="chip ${m.ok===true?"ok":m.ok==="parcial"?"parcial":"no"}${m.tier?" tb-"+tierKey(m.tier):""}">${m.ok===true?"✓ ":""}${m.tier?tdot(m.tier):""}${esc(m.short||m.label)}${m.tier?` <span class="tier ${tierKey(m.tier)}">${TIER_LABEL[m.tier]}</span>`:""}</span>`).join("")}</div></div>`).join("")}
+  ${["Brinco","Piercing"].filter(T=>joiasOf(c).some(j=>j.tipo===T&&norm(j.tier)==="ORDEM")).map(T=>`<div class="panel small" style="border-color:var(--t-ordem)"><b class="tier ORDEM">${T} da Ordem:</b> tem atributos de Lendário, mas não pode ser craftado para o Caos. Por isso não conta nas metas de farm: o caminho Épico → Lendário → Caos segue pelos outros ${T.toLowerCase()}s que você tiver.</div>`).join("")}
+  <div class="muted small">As metas são calculadas pelos dados das outras abas. SR, Colar e Despertar são marcados na aba Geral.</div></div>`}
+};
+
+/* ---------------- Inventário (recursos da conta e de cada personagem) ---------------- */
+const DEFAULT_RECURSOS = [
+  ["frag-brinco","Fragmento de Brinco","conta"],["frag-piercing","Fragmento de Piercing","conta"],
+  ["nucleo-dimensional","Núcleo Dimensional","personagem"],["frag-caos","Fragmento do Caos","personagem"],
+  ["frag-vazio","Fragmento do Vazio","personagem"],["frag-vazio-apocalipse","Fragmento do Vazio do Apocalipse","personagem"],
+  ["fragmento-de-adrite","Fragmento de Adrite","conta"],["estilhaco-de-escuridao","Estilhaço de Escuridão","conta"],["nucleo-sentinela-antigo","Núcleo Sentinela Antigo","conta"],
+  ["chamas-das-bestas-miticas","Chamas das Bestas Míticas","conta"],["pulseira-de-folha-quebrada","Pulseira de Folha Quebrada","conta"],["massa-de-desejos-concentrados","Massa de Desejos Concentrados","conta"]
+].map(([id,nome,escopo],i)=>({id,nome,escopo,ordem:i+1,ativo:true}));
+function recursosAll(){const base=S.cfg?.recursos?.length?[...S.cfg.recursos]:[];const ids=new Set(base.map(r=>r.id));DEFAULT_RECURSOS.forEach(r=>{if(!ids.has(r.id))base.push({...r,ordem:(r.ordem??0)+1000})});return base.sort((a,b)=>(a.ordem??99)-(b.ordem??99))}
+function recursos(escopo){return recursosAll().filter(r=>r.ativo!==false&&(!escopo||r.escopo===escopo))}
+function invConta(){return S.players[S.uid]?.inventario||{}}
+function qtd(v){return v==null||v===""?"":(+v).toLocaleString("pt-BR")}
+function qtdIn(act,attrs,val,label){return `<input type="number" min="0" step="1" inputmode="numeric" class="num inv" data-act="${act}" ${attrs} value="${val??""}" aria-label="${esc(label)}">`}
+
+function invView(){const rc=recursos("conta"),ri=recursos("personagem"),cs=catalog(),conta=invConta();
+  return `<h2 style="margin-bottom:12px">Inventário</h2><div class="sect">
+  <div class="panel sect"><div><h3>Inventário da conta</h3><div class="muted small">Recursos compartilhados entre todos os personagens.</div></div>
+   ${rc.length?`<div class="invgrid">${rc.map(r=>`<label class="f">${esc(r.nome)}${qtdIn("invconta",`data-r="${r.id}"`,conta[r.id],r.nome)}</label>`).join("")}</div>`:'<div class="muted">Nenhum recurso de conta cadastrado.</div>'}</div>
+  <div class="panel sect"><div><h3>Inventário por personagem</h3><div class="muted small">Recursos individuais: são de cada personagem e não podem ser transferidos. Edite direto na tabela.</div></div>
+   ${ri.length?bulkPanel(ri,cs):""}
+   ${ri.length?`<div class="tablebox"><table><thead><tr><th></th><th>Personagem</th>${ri.map(r=>`<th class="num">${esc(r.nome)}</th>`).join("")}</tr></thead><tbody>
+   ${cs.map(ch=>{const inv=S.chars[ch.id]?.inventario||{};return `<tr><td>${avatar(ch,"sm")}</td><td><b>${esc(ch.nome)}</b></td>${ri.map(r=>`<td>${qtdIn("invchar",`data-id="${ch.id}" data-r="${r.id}"`,inv[r.id],`${r.nome} de ${ch.nome}`)}</td>`).join("")}</tr>`}).join("")}
+   </tbody></table></div>`:'<div class="muted">Nenhum recurso individual cadastrado.</div>'}</div></div>`}
+
+/* lançamento em lote: mesmo recurso e quantidade em vários personagens */
+function bulkState(ri){const b=S.bulk||(S.bulk={r:"",q:"",op:"somar",sel:[]});if(!ri.some(r=>r.id===b.r))b.r=ri[0]?.id||"";return b}
+function bulkPanel(ri,cs){const b=bulkState(ri);const n=b.sel.length;
+  return `<div class="bulk sect"><div class="row between"><b>Lançar em vários personagens</b><span class="muted small">${n} selecionado${n===1?"":"s"}</span></div>
+   <div class="row">
+    <label class="f">Recurso<select id="bk_r" data-act="bulkset" data-k="r">${ri.map(r=>`<option value="${r.id}" ${r.id===b.r?"selected":""}>${esc(r.nome)}</option>`).join("")}</select></label>
+    <label class="f">Operação<select id="bk_op" data-act="bulkset" data-k="op"><option value="somar" ${b.op==="somar"?"selected":""}>Somar ao que já tem</option><option value="definir" ${b.op==="definir"?"selected":""}>Definir o valor</option></select></label>
+    <label class="f">Quantidade<input type="number" step="1" inputmode="numeric" class="num inv" id="bk_q" data-act="bulkset" data-k="q" value="${esc(b.q)}" placeholder="${b.op==="somar"?"ex.: 30 ou -10":"ex.: 0"}"></label>
+    <button class="btn primary" data-act="bulkapply" ${n&&b.q!==""&&!b.saving?"":"disabled"} style="align-self:flex-end">${b.saving?`Gravando ${b.done}/${n}…`:"Aplicar"}</button>
+   </div>
+   <div class="row" style="gap:6px"><button class="btn ghost small" data-act="bulkall">Todos</button><button class="btn ghost small" data-act="bulknone">Nenhum</button></div>
+   <div class="bulkchars">${cs.map(ch=>{const on=b.sel.includes(ch.id);return `<label class="bulkchar ${on?"on":""}"><input type="checkbox" data-act="bulktoggle" data-id="${ch.id}" ${on?"checked":""}>${avatar(ch,"sm")}<span>${esc(ch.nome)}</span></label>`}).join("")}</div>
+  </div>`}
+async function bulkApply(){if(!canWrite())return;const b=S.bulk;const q=Math.round(+b.q);if(!b.r||!b.sel.length||!isFinite(q))return;
+  const nome=recursosAll().find(r=>r.id===b.r)?.nome||b.r;b.saving=true;b.done=0;render();
+  try{await ensurePlayer();const lista=[...b.sel].map(id=>{const c=charOf(id);const cur=+(c.inventario?.[b.r])||0;const v=Math.max(0,b.op==="somar"?cur+q:q);
+      c.inventario={...(c.inventario||{}),[b.r]:v};return [id,c]});await writeChars(lista);b.done=lista.length;render();
+    toast(`${b.op==="somar"?(q>=0?`+${q}`:q):`= ${q}`} ${nome} em ${b.sel.length} personage${b.sel.length===1?"m":"ns"}`);b.q=""}
+  catch(err){toast(errMsg(err))}finally{b.saving=false;render()}}
+
+function invCharTab(ch,c){const ri=recursos("personagem"),rc=recursos("conta"),conta=invConta();
+  return `<div class="sect"><div class="panel sect"><div><h3>Recursos de ${esc(ch.nome)}</h3><div class="muted small">Individuais e intransferíveis. Salve com o botão Salvar.</div></div>
+   <div class="invgrid">${ri.map(r=>`<label class="f">${esc(r.nome)}<input type="number" min="0" step="1" inputmode="numeric" class="num inv" data-path="inventario.${r.id}" data-num="1" value="${c.inventario?.[r.id]??""}"></label>`).join("")||'<span class="muted">Nenhum recurso individual cadastrado.</span>'}</div></div>
+  ${rc.length?`<div class="panel sect"><div><h3>Da conta (compartilhados)</h3><div class="muted small">Para editar, use a aba Inventário.</div></div>
+   <div class="chips">${rc.map(r=>`<span class="chip no">${esc(r.nome)}: <b>${qtd(conta[r.id])||0}</b></span>`).join("")}</div></div>`:""}</div>`}
+
+async function saveInvConta(rid,v){if(!canWrite())return;const p={...(S.players[S.uid]||{nick:""})};p.inventario={...(p.inventario||{}),[rid]:v};if(v==null)delete p.inventario[rid];
+  try{S.players[S.uid]=p;await db.doc(`players/${S.uid}`).set(p);toast("Inventário da conta salvo")}catch(err){toast(errMsg(err))}}
+async function saveInvChar(id,rid,v){if(!canWrite())return;const c=charOf(id);c.inventario={...(c.inventario||{}),[rid]:v};if(v==null)delete c.inventario[rid];
+  try{await ensurePlayer();await writeChar(id,c);render()}catch(err){toast(errMsg(err))}}
+
+function recursosAdmin(){const rs=recursosAll(),n=S.newRec;
+  return `<div class="panel sect"><div class="row between"><h3>Cadastro de recursos</h3><button class="btn" data-act="newrec">Novo recurso</button></div>
+   <div class="muted small"><b>Conta</b>: compartilhado entre todos os personagens (ex.: fragmentos de brinco e piercing). <b>Individual</b>: de cada personagem e intransferível (ex.: núcleo dimensional, fragmentos do caos e do vazio).</div>
+   ${n?`<div class="panel sect" style="background:var(--surface-2)"><div class="row">
+     <label class="f">Nome<input type="text" id="nr_nome" value="${esc(n.nome)}" maxlength="50"></label>
+     <label class="f">Tipo<select id="nr_escopo"><option value="personagem">Individual</option><option value="conta">Conta</option></select></label></div>
+     <div class="row"><button class="btn primary" data-act="nrsave">Cadastrar</button><button class="btn" data-act="nrcancel">Cancelar</button>${n.error?`<span class="small" style="color:var(--t-caos)">${esc(n.error)}</span>`:""}</div></div>`:""}
+   <div class="tablebox"><table><thead><tr><th>Recurso</th><th>Tipo</th><th>Ativo</th><th>Ordem</th></tr></thead><tbody>
+   ${rs.map((r,i)=>`<tr><td><input type="text" data-act="recnome" data-id="${r.id}" value="${esc(r.nome)}" maxlength="50" aria-label="Nome do recurso"></td>
+     <td><select data-act="recescopo" data-id="${r.id}" aria-label="Tipo de ${esc(r.nome)}"><option value="personagem" ${r.escopo==="personagem"?"selected":""}>Individual</option><option value="conta" ${r.escopo==="conta"?"selected":""}>Conta</option></select></td>
+     <td><input type="checkbox" data-act="recativo" data-id="${r.id}" ${r.ativo!==false?"checked":""} aria-label="Ativo"></td>
+     <td><button class="btn ghost" data-act="recmove" data-id="${r.id}" data-d="-1" ${i===0?"disabled":""} aria-label="Subir">↑</button><button class="btn ghost" data-act="recmove" data-id="${r.id}" data-d="1" ${i===rs.length-1?"disabled":""} aria-label="Descer">↓</button></td></tr>`).join("")}
+   </tbody></table></div>
+   <div class="muted small">Trocar o tipo de um recurso não move as quantidades já lançadas: elas continuam guardadas e reaparecem se você voltar o tipo.</div></div>`}
+async function writeRecursos(rs){const cfg=cfgBase();rs.forEach((r,i)=>r.ordem=i+1);cfg.recursos=rs;await writeCfg(cfg);render()}
+async function updateRecurso(id,patch){const rs=clone(recursosAll());const r=rs.find(x=>x.id===id);if(!r)return;Object.assign(r,patch);try{await writeRecursos(rs)}catch(err){toast(errMsg(err))}}
+async function moveRecurso(id,d){const rs=clone(recursosAll());const i=rs.findIndex(x=>x.id===id),j=i+d;if(i<0||j<0||j>=rs.length)return;[rs[i],rs[j]]=[rs[j],rs[i]];try{await writeRecursos(rs)}catch(err){toast(errMsg(err))}}
+async function saveNovoRecurso(){const n=S.newRec;n.nome=(document.getElementById("nr_nome")?.value||"").trim();n.escopo=document.getElementById("nr_escopo")?.value==="conta"?"conta":"personagem";
+  if(!n.nome){n.error="Digite o nome.";render();return}const id=slug(n.nome);const rs=clone(recursosAll());if(rs.some(r=>r.id===id)){n.error="Já existe um recurso com esse nome.";render();return}
+  rs.push({id,nome:n.nome,escopo:n.escopo,ativo:true});try{await writeRecursos(rs);S.newRec=null;toast(`${n.nome} cadastrado`);render()}catch(err){n.error=errMsg(err);render()}}
+
+VIEWS.inventario=invView;
+CHARTABS.inventario=invCharTab;
+
+/* ---------------- Forja: custo em recursos para cada personagem bater as metas ---------------- */
+/* receitas por nível (o item do nível anterior também é consumido, mas não é recurso de inventário) */
+const DEFAULT_RECEITAS = {
+  torn: [null,
+    {"fragmento-de-adrite":30,"estilhaco-de-escuridao":17},
+    {"estilhaco-de-escuridao":10,"nucleo-sentinela-antigo":17,"fragmento-de-adrite":30},
+    {"estilhaco-de-escuridao":5,"nucleo-sentinela-antigo":10,"chamas-das-bestas-miticas":17,"fragmento-de-adrite":30},
+    {"nucleo-sentinela-antigo":5,"chamas-das-bestas-miticas":10,"pulseira-de-folha-quebrada":17,"fragmento-de-adrite":50},
+    {"chamas-das-bestas-miticas":5,"pulseira-de-folha-quebrada":10,"massa-de-desejos-concentrados":17,"fragmento-de-adrite":50}],
+  brinco: [null,{"frag-brinco":30},{"frag-brinco":50},{"frag-brinco":100,"nucleo-dimensional":150},{"nucleo-dimensional":100,"frag-caos":200}],
+  piercing: [null,{"frag-piercing":60},{"frag-piercing":100},{"frag-piercing":160,"nucleo-dimensional":150},{"nucleo-dimensional":100,"frag-caos":200}],
+  /* baús do Vazio: 1 baú por peça que ainda não é Vazio (7 equipamentos sem a Arma 2, igual às metas; 5 acessórios) */
+  vazioeq: [null,...Array(7).fill({"frag-vazio":40})],
+  vazioac: [null,...Array(5).fill({"frag-vazio-apocalipse":40})]
+};
+function receitas(){return {...DEFAULT_RECEITAS,...(S.cfg?.receitas||{})}}
+/* custo de ir do nível atual até o alvo: "max", "proximo" ou um nível (1..máx) */
+function custoCadeia(lista,atual,alvo){const out={},max=lista.length-1;const ate=alvo==="proximo"?Math.min(atual+1,max):alvo==="max"||alvo==null?max:Math.min(+alvo,max);
+  for(let n=atual+1;n<=ate;n++)for(const [r,q] of Object.entries(lista[n]||{}))out[r]=(out[r]||0)+q;return {out,de:atual,ate:Math.max(ate,atual),alvo:ate}}
+const TIER_NOME = ["Nenhum","Raro","Épico","Lendário","Caos"];
+const nVazio=(c,lista,grupo)=>lista.filter(p=>c[grupo]?.[p.id]?.conjunto==="Vazio").length;
+const FORJA_ITENS = {brinco:{label:"Brinco",nivel:c=>farmLvl(c,"Brinco"),rec:"brinco",max:4},piercing:{label:"Piercing",nivel:c=>farmLvl(c,"Piercing"),rec:"piercing",max:4},
+  conjunto:{label:"Conjunto (brinco + piercing)",partes:["brinco","piercing"],max:4},
+  torn:{label:"Tornozeleira",nivel:c=>+c.tornozeleira||0,rec:"torn",max:5},
+  vazioeq:{label:"Baú de equipamento do Vazio",nivel:c=>nVazio(c,EQUIP.filter(p=>!p.only2),"pecas"),rec:"vazioeq",max:7,vazio:true},
+  vazioac:{label:"Baú de acessório do Vazio",nivel:c=>nVazio(c,ACESS,"acess"),rec:"vazioac",max:5,vazio:true}};
+function nivelNome(item,n){if(item==="torn")return n?`${n} (${TORN_NOME[n-1]})`:"nenhuma";if(FORJA_ITENS[item]?.vazio)return `${n} de ${FORJA_ITENS[item].max} peças`;return TIER_NOME[n]||"Nenhum"}
+function alvoNome(item,n){if(item==="torn")return `${n} · ${TORN_NOME[n-1]}`;if(FORJA_ITENS[item]?.vazio)return `${n} de ${FORJA_ITENS[item].max} peças do Vazio`;
+  const t=["RARO","EPICO","LENDÁRIO","CAOS"][n-1];return item==="conjunto"?`${TIER_NOME[n]} · brinco + piercing`:`${TIER_NOME[n]} · ${NOMES[item][t]}`}
+/* filtro = {item:"todos"|chave de FORJA_ITENS, alvo:"max"|"proximo"|"1".."7"} */
+function custoPersonagem(c,filtro){const R=receitas();const f=typeof filtro==="string"?{item:"todos",alvo:filtro}:(filtro||{item:"todos",alvo:"max"});
+  const itens=f.item==="todos"?["brinco","piercing","torn","vazioeq","vazioac"]:FORJA_ITENS[f.item]?.partes||[f.item];const alvo=f.item==="todos"&&!["max","proximo"].includes(f.alvo)?"max":f.alvo;
+  const tot={},passos=[];let jaTem=true;
+  for(const it of itens){const I=FORJA_ITENS[it];const x=custoCadeia(R[I.rec],I.nivel(c),alvo);for(const [r,q] of Object.entries(x.out))tot[r]=(tot[r]||0)+q;
+    if(x.ate>x.de){jaTem=false;passos.push(I.vazio?`${I.label} ×${x.ate-x.de} (tem ${nivelNome(it,x.de)})`:`${I.label} ${nivelNome(it,x.de)} → ${nivelNome(it,x.ate)}`)}}
+  return {tot,passos,jaTem}}
+try{S.forja={item:"todos",alvo:"max",ch:"",...JSON.parse(localStorage.getItem("gc-forja")||"{}")}}catch{S.forja={item:"todos",alvo:"max",ch:""}}
+function setForja(patch){S.forja={...S.forja,...patch};try{localStorage.setItem("gc-forja",JSON.stringify(S.forja))}catch{}render()}
+
+function forjaView(){const F=S.forja;const item=FORJA_ITENS[F.item]?F.item:"todos";const alvo=F.alvo||"max";
+  const um=F.ch&&catById(F.ch)?catById(F.ch):null;const lista=um?[um]:catalog();
+  const rc=recursos("conta"),ri=recursos("personagem");
+  /* fragmentos dos baús do Vazio: o baú pode ser passado entre personagens, então contam como um estoque só */
+  const BAU=new Set(Object.values(FORJA_ITENS).filter(I=>I.vazio).map(I=>Object.keys(receitas()[I.rec][1])[0]));const invTodos=r=>catalog().reduce((s,ch)=>s+invOf(ch.id,r),0);const invOf=(id,r)=>+(S.chars[id]?.inventario?.[r])||0;const ids=new Set([...rc,...ri].map(r=>r.id));const conta=invConta();
+  const linhas=lista.map(ch=>{const c=charOf(ch.id);const x=custoPersonagem(c,{item,alvo});const tot={};for(const [r,q] of Object.entries(x.tot))if(ids.has(r))tot[r]=q;return {ch,c,tot,passos:x.passos,jaTem:x.jaTem}});
+  const soma={};linhas.forEach(l=>{for(const [r,q] of Object.entries(l.tot))soma[r]=(soma[r]||0)+q});
+  const pend=linhas.filter(l=>!l.jaTem),feitos=linhas.length-pend.length;
+  // opções de alvo conforme o item
+  const alvos=item==="todos"?[["max","Até o máximo"],["proximo","Só o próximo nível"]]
+    :FORJA_ITENS[item].vazio?[["max","Todas as peças"],["proximo","Só a próxima peça (1 baú)"],...Array.from({length:FORJA_ITENS[item].max},(_,i)=>[String(i+1),alvoNome(item,i+1)])]
+    :[["proximo","Próximo nível"],["max","Máximo"],...Array.from({length:FORJA_ITENS[item].max},(_,i)=>[String(i+1),alvoNome(item,i+1)])];
+  const alvoTxt=(alvos.find(a=>a[0]===alvo)||alvos[0])[1];
+  const filtros=`<div class="row" style="margin-bottom:12px">
+    <label class="f">Item<select data-act="forjaitem"><option value="todos" ${item==="todos"?"selected":""}>Todos (brinco, piercing, tornozeleira e baús do Vazio)</option>${Object.entries(FORJA_ITENS).map(([k,I])=>`<option value="${k}" ${item===k?"selected":""}>${I.label}</option>`).join("")}</select></label>
+    <label class="f">Alvo<select data-act="forjaalvo">${alvos.map(([v,l])=>`<option value="${v}" ${v===alvo?"selected":""}>${esc(l)}</option>`).join("")}</select></label>
+    <label class="f">Personagens<select data-act="forjach"><option value="">Todos os personagens (${catalog().length})</option>${catalog().map(c=>`<option value="${c.id}" ${um?.id===c.id?"selected":""}>${esc(c.nome)}</option>`).join("")}</select></label></div>`;
+  if(FORJA_ITENS[item]?.vazio)return forjaBau(item,filtros,um);
+  const tabela=(recs,temDe,titulo,nota,faltaDe)=>{const us=recs.filter(r=>soma[r.id]);return `<div class="panel sect"><h3>${titulo}</h3>
+   ${us.length?`<div class="tablebox"><table><thead><tr><th>Recurso</th><th class="num">Precisa</th><th class="num">Tem</th><th class="num">Falta</th><th></th></tr></thead><tbody>
+   ${us.map(r=>{const need=soma[r.id],tem=+temDe(r.id)||0,falta=faltaDe?faltaDe(r.id):Math.max(0,need-tem),pct=need?Math.min(100,Math.round((need-falta)/need*100)):100;
+     return `<tr><td><b>${esc(r.nome)}</b></td><td class="num">${qtd(need)}</td><td class="num">${qtd(tem)}</td><td class="num"><b style="color:${falta?"var(--t-caos)":"var(--good)"}">${falta?qtd(falta):"✓"}</b></td><td><div class="bar" style="width:120px"><i style="width:${pct}%"></i></div></td></tr>`}).join("")}
+   </tbody></table></div>`:`<div class="muted">Nenhum recurso necessário para esse alvo.</div>`}
+   <div class="muted small">${nota}</div></div>`};
+  const status=item==="todos"?"":`<div class="chips" style="margin-bottom:12px"><span class="chip ${pend.length?"next":"ok"}">${um?(pend.length?`${esc(um.nome)} ainda não tem`:`${esc(um.nome)} já tem`):`${feitos} de ${linhas.length} personagens já têm`} · ${esc(FORJA_ITENS[item].label)} ${esc(alvoTxt)}</span></div>`;
+  return `<div class="row between" style="margin-bottom:8px"><h2>Forja${um?` · ${esc(um.nome)}`:""}</h2></div>
+  ${filtros}
+  <div class="panel small" style="margin-bottom:12px;border-left:3px solid var(--label)">Calcula do que ${um?"o personagem":"cada personagem"} já tem (inventário incluído) até o alvo escolhido. Brinco ou piercing da Ordem conta do zero, porque não evolui. Baús do Vazio: 1 baú (40 fragmentos) para cada peça que ainda não é do Vazio.${um?" Com um personagem selecionado, os recursos individuais dele também aparecem.":""} Para ver quem está mais perto de fechar um baú, escolha o item do baú.</div>
+  ${status}<div class="sect">
+  ${tabela(rc,id=>conta[id],um?"Recursos de conta":"Resumo da conta",'"Tem" vem do Inventário da conta.')}
+  ${um?tabela(ri,id=>invOf(um.id,id),`Recursos individuais de ${esc(um.nome)}`,`"Tem" vem do inventário de ${esc(um.nome)}.`)
+    :tabela(ri,r=>BAU.has(r)?invTodos(r):pend.reduce((s,l)=>s+(l.tot[r]?Math.min(invOf(l.ch.id,r),l.tot[r]):0),0),"Recursos individuais (somando os personagens)",'Cada personagem usa só o próprio inventário: "Tem" conta o que cada um tem até o que ele precisa, e "Falta" soma o que falta para cada um. Exceção: os fragmentos do Vazio contam todos juntos, porque o baú pode ser passado para outro personagem.',r=>BAU.has(r)?Math.max(0,(soma[r]||0)-invTodos(r)):pend.reduce((s,l)=>s+Math.max(0,(l.tot[r]||0)-invOf(l.ch.id,r)),0))}
+  ${um?(linhas[0].passos.length?`<div class="panel sect"><h3>Falta forjar</h3><div class="chips">${linhas[0].passos.map(p=>`<span class="chip next">${esc(p)}</span>`).join("")}</div></div>`:""):
+  `<div class="panel sect"><h3>Por personagem</h3>
+   ${pend.length?`<div class="tablebox"><table><thead><tr><th></th><th>Personagem</th><th>Falta forjar</th>${[...rc,...ri].filter(r=>soma[r.id]).map(r=>`<th class="num">${esc(r.nome)}</th>`).join("")}</tr></thead><tbody>
+   ${pend.map(l=>`<tr style="cursor:pointer" data-act="forjaver" data-id="${l.ch.id}"><td>${avatar(l.ch,"sm")}</td><td><b>${esc(l.ch.nome)}</b></td><td class="small" style="white-space:normal;min-width:180px">${l.passos.map(esc).join("<br>")}</td>${[...rc,...ri].filter(r=>soma[r.id]).map(r=>`<td class="num">${l.tot[r.id]?qtd(l.tot[r.id]):'<span class="muted">—</span>'}</td>`).join("")}</tr>`).join("")}
+   </tbody></table></div><div class="muted small">Clique num personagem para ver só ele (com os recursos individuais).</div>`:'<div class="muted">Todos os personagens já estão no alvo.</div>'}</div>`}
+  </div>`}
+/* baús do Vazio: os fragmentos são de cada personagem, mas o baú pode ser passado para outro.
+   Por isso a conta é da conta inteira (peças que faltam) e a lista mostra quem está mais perto de fechar o próximo baú. */
+function forjaBau(item,filtros,um){const I=FORJA_ITENS[item],R=receitas()[I.rec],rec=Object.keys(R[1])[0],por=R[1][rec];
+  const nome=recursos("personagem").find(r=>r.id===rec)?.nome||rec;
+  const rows=catalog().map(ch=>{const c=charOf(ch.id),frag=+(S.chars[ch.id]?.inventario?.[rec])||0;return {ch,frag,prontos:Math.floor(frag/por),resto:frag%por,faltaPecas:I.max-I.nivel(c)}});
+  const pecas=rows.reduce((s,r)=>s+r.faltaPecas,0),prontos=rows.reduce((s,r)=>s+r.prontos,0),frag=rows.reduce((s,r)=>s+r.frag,0);
+  const lista=(um?rows.filter(r=>r.ch.id===um.id):rows).filter(r=>um||r.frag>0).sort((a,b)=>(b.resto/por)-(a.resto/por)||b.frag-a.frag);
+  const filtrosSemAlvo=filtros.replace(/<label class="f">Alvo[\s\S]*?<\/label>/,"");
+  return `<div class="row between" style="margin-bottom:8px"><h2>Forja${um?` · ${esc(um.nome)}`:""}</h2></div>
+  ${filtrosSemAlvo}
+  <div class="panel small" style="margin-bottom:12px;border-left:3px solid var(--label)">Cada baú custa <b>${por} ${esc(nome)}</b>. Os fragmentos são de cada personagem, mas o baú pode ser passado para outro: por isso a lista mostra quem está <b>mais perto de fechar o próximo baú</b>, para você saber onde colocar fragmentos que ganhar.</div>
+  <div class="stats">
+    <div class="stat"><span>Peças que faltam na conta</span><b>${pecas}</b><div class="muted small">${I.label.replace("Baú de ","").replace(" do Vazio","")}s que ainda não são do Vazio</div></div>
+    <div class="stat"><span>Baús que já dá para fazer</span><b>${prontos}</b><div class="muted small">${qtd(frag)} fragmentos ao todo</div></div>
+    <div class="stat"><span>Baús que ainda faltam</span><b>${Math.max(0,pecas-prontos)}</b><div class="muted small">${pecas>prontos?`≈ ${qtd((pecas-prontos)*por)} fragmentos`:"já cobre todas as peças"}</div></div>
+  </div>
+  <div class="panel sect"><h3>${um?esc(um.nome):"Mais perto de fechar um baú"}</h3>
+   ${lista.length?`<div class="tablebox"><table><thead><tr><th></th><th>Personagem</th><th class="num">Fragmentos</th><th class="num">Baús prontos</th><th>Próximo baú</th><th class="num">Faltam</th><th class="num">Peças sem Vazio</th></tr></thead><tbody>
+   ${lista.map(r=>`<tr style="cursor:pointer" data-act="open" data-id="${r.ch.id}"><td>${avatar(r.ch,"sm")}</td><td><b>${esc(r.ch.nome)}</b></td><td class="num">${qtd(r.frag)}</td><td class="num">${r.prontos?`<b style="color:var(--good)">${r.prontos}</b>`:'<span class="muted">—</span>'}</td>
+     <td><div class="row" style="gap:8px;flex-wrap:nowrap"><div class="bar" style="width:120px"><i style="width:${Math.round(r.resto/por*100)}%"></i></div><span class="small num">${r.resto}/${por}</span></div></td>
+     <td class="num"><b>${por-r.resto}</b></td><td class="num muted">${r.faltaPecas||"✓"}</td></tr>`).join("")}</tbody></table></div>
+   <div class="muted small">Ordenado por quem está mais perto do próximo baú. "Fragmentos" vem do inventário de cada personagem; clique para abrir o personagem.</div>`
+   :`<div class="muted">Nenhum personagem tem ${esc(nome)} no inventário.</div>`}</div>`}
+VIEWS.forja=forjaView;
+
+/* ---------------- Overlay: barra de salvar, modal de print, toast ---------------- */
+function checkNick(){if(!db||!S.uid||!S.playersOk||S.nickLater)return;const tem=(S.players[S.uid]?.nick||"").trim();const antes=!!S.askNick;S.askNick=!tem;if(antes!==S.askNick)renderOverlay()}
+function nickModal(){return `<div class="modal"><div class="box" role="dialog" aria-label="Cadastre seu nick">
+   <h3>Bem-vindo ao GC Tracker!</h3>
+   <div class="small" style="color:var(--ink-2)">Antes de começar, qual é o seu <b>nick no jogo</b>? Ele aparece no ranking da guilda para os outros jogadores saberem de quem são os personagens.</div>
+   <label class="f">Nick no Grand Chase<input type="text" id="nickNovo" maxlength="40" placeholder="ex.: CrimsonStorm" autocomplete="nickname"></label>
+   ${S.nickErr?`<div class="small" style="color:var(--t-caos)">${esc(S.nickErr)}</div>`:""}
+   <div class="row" style="justify-content:flex-end"><button class="btn ghost" data-act="nicklater">Agora não</button><button class="btn primary" data-act="nicksave">Salvar nick</button></div>
+  </div></div>`}
+async function saveNickNovo(){const el=document.getElementById("nickNovo");const v=(el?.value||"").trim().slice(0,40);
+  if(!v){S.nickErr="Digite o seu nick.";renderOverlay();return}
+  const dup=Object.entries(S.players).some(([id,p])=>id!==S.uid&&norm(p?.nick)===norm(v));if(dup){S.nickErr="Esse nick já está sendo usado por outro jogador da guilda.";renderOverlay();return}
+  try{const d={...(S.players[S.uid]||{}),nick:v};if(!d.criadoEm)d.criadoEm=new Date().toISOString();S.players[S.uid]=d;await db.doc(`players/${S.uid}`).set(d);S.askNick=false;S.nickErr="";renderOverlay();toast(`Bem-vindo, ${v}!`);if(S.view==="dados"||S.view==="ranking")render()}
+  catch(err){S.nickErr=errMsg(err);renderOverlay()}}
+function renderOverlay(){let h="";if(S.askNick&&!S.print)h+=nickModal();
+  if(S.view==="char"&&S.dirty)h+=`<div class="savebar"><div class="wrap"><b>Alterações não salvas</b><span style="flex:1"></span><button class="btn ghost" data-act="discard">Descartar</button><button class="btn primary" data-act="save" ${S.saving?"disabled":""}>${S.saving?"Salvando…":"Salvar"}</button></div></div>`;
+  if(S.print)h+=printModal();
+  if(S.toast)h+=`<div class="toast" role="status">${esc(S.toast)}</div>`;
+  document.getElementById("overlay").innerHTML=h}
+const PRINT_MODES = {
+  equip:{label:"Tela de equipamento",help:"Print da aba de equipamento do inventário (com o painel Status). O Claude lê Ataque Total, Título, e o refino e o conjunto de cada peça pela cor do slot."},
+  tooltip:{label:"Tooltip de item",help:"Print com o tooltip de uma peça, brinco ou piercing aberto. Peça: conjunto, refino, cartas e propriedades. Brinco/piercing: entra na lista do personagem."},
+  pet:{label:"Tela do pet",help:"Print do Livro das Pedras Mágicas (Página Mágica) aberto. O Claude lê o nome do pet e o tipo de cada pedra equipada pelo formato."},
+  no:{label:"Nó do despertar",help:"Print da janela do nó (Núcleo de Apoio da Criação/Destruição/Harmonia). O Claude lê o tipo do nó, o atributo equipado, o valor e a qualidade. Escolha abaixo em qual trecho do caminho ele fica."},
+  despertar:{label:"Tela do despertar",help:"Print da Árvore de Talentos na aba DESPERTAR, de preferência com o painel Atributos Ativos aberto: aí o Claude preenche os 3 despertares e os 9 nós (atributo, valor e qualidade pela cor) de uma vez."}
+};
+function printModal(){const P=S.print,ch=catById(S.charId);
+  return `<div class="modal" data-act="closeprint-bg"><div class="box" role="dialog" aria-label="Ler print">
+   <div class="row between"><h3>Ler print · ${esc(ch?.nome||"")}</h3><button class="btn ghost" data-act="closeprint" aria-label="Fechar">✕</button></div>
+   <div class="row" style="gap:6px">${Object.entries(PRINT_MODES).map(([k,m])=>`<button class="btn ${P.mode===k?"primary":""}" data-act="printmode" data-m="${k}">${m.label}</button>`).join("")}</div>
+   ${P.mode==="tooltip"?`<label class="f">Peça (se for equipamento ou acessório)<select data-act="printpiece"><optgroup label="Equipamentos">${EQUIP.filter(p=>!p.only2||ch?.arma2).map(p=>`<option value="${p.id}" ${p.id===P.piece?"selected":""}>${p.label}</option>`).join("")}</optgroup><optgroup label="Acessórios">${ACESS.map(p=>`<option value="${p.id}" ${p.id===P.piece?"selected":""}>${p.label}</option>`).join("")}</optgroup></select></label>`:""}
+   ${P.mode==="no"?`<label class="f">Trecho do caminho<select data-act="printgrupo">${[["g1","Entre a 4ª Barra e o Despertar 1"],["g2","Entre o Despertar 1 e o 2"],["g3","Entre o Despertar 2 e o 3"]].map(([v,l])=>`<option value="${v}" ${P.grupo===v?"selected":""}>${l}</option>`).join("")}</select></label>`:""}
+   <div class="muted small">${PRINT_MODES[P.mode].help} Você confere antes de aplicar. A leitura usa a sua cota do Claude.</div>
+   <label class="drop ${P.url?"has":""}" id="drop">${P.url?`<img src="${P.url}" alt="Print escolhido">`:"Clique para escolher ou arraste o print aqui"}<input type="file" hidden accept="image/png,image/jpeg,image/webp" data-act="printfile"></label>
+   ${imgAviso()}
+   ${P.status==="loading"?'<div class="muted">Lendo o print… isso leva de 10 a 40 segundos.</div>':""}
+   ${P.error?`<div style="color:var(--t-caos)">${esc(P.error)}</div>`:""}
+   ${P.diff?`<div class="tablebox"><table><thead><tr><th>Campo</th><th>Atual</th><th>Lido no print</th></tr></thead><tbody>${P.diff.map(d=>`<tr><td>${esc(d.label)}</td><td class="muted">${esc(d.old)}</td><td><b>${esc(d.nw)}</b></td></tr>`).join("")||'<tr><td colspan="3" class="muted">Nada novo: o print bate com o que já está preenchido.</td></tr>'}</tbody></table></div>
+     ${P.note?`<div class="small muted">${esc(P.note)}</div>`:""}
+     ${P.joia?`<label class="row small"><input type="checkbox" data-act="printjoiaeq" ${P.joia.equipado?"checked":""}> Está equipado neste personagem</label>`:""}`:""}
+   <div class="row" style="justify-content:flex-end"><button class="btn" data-act="closeprint">Cancelar</button>
+    ${P.diff?`<button class="btn primary" data-act="printapply" ${P.diff.length?"":"disabled"}>Aplicar no formulário</button>`:`<button class="btn primary" data-act="printread" ${P.file&&P.status!=="loading"&&sample?"":"disabled"}>Ler com Claude</button>`}</div>
+  </div></div>`}
+
+/* ---------------- Gráfico de histórico (SVG, uma série) ---------------- */
+function drawChart(){const box=document.getElementById("chart");if(!box)return;const pts=(S.histChar==="todos"?histTodos().serie:(S.hist[S.histChar]?.pontos||[])).filter(p=>p.at!=null);if(!pts.length){box.innerHTML="";return}
+  const W=760,H=260,m={l:64,r:18,t:16,b:30};const xs=pts.map(p=>new Date(p.d+"T12:00").getTime());const ys=pts.map(p=>+p.at);
+  let y0=Math.min(...ys),y1=Math.max(...ys);if(y0===y1){y0*=.95;y1*=1.05}const pad=(y1-y0)*.12;y0=Math.max(0,y0-pad);y1+=pad;
+  const step=niceStep((y1-y0)/4);y0=Math.floor(y0/step)*step;y1=Math.ceil(y1/step)*step;
+  const x0=Math.min(...xs),x1=Math.max(...xs)===x0?x0+864e5:Math.max(...xs);
+  const X=t=>m.l+(t-x0)/(x1-x0)*(W-m.l-m.r),Y=v=>m.t+(1-(v-y0)/(y1-y0))*(H-m.t-m.b);
+  let g="";for(let v=y0;v<=y1+1e-9;v+=step)g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${m.l-8}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${Math.round(v).toLocaleString("pt-BR")} K</text>`;
+  const fmtD=t=>{const d=new Date(t);return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}`};
+  const ticks=pts.length<=6?xs:[xs[0],xs[Math.floor(xs.length/2)],xs.at(-1)];
+  ticks.forEach(t=>g+=`<text x="${X(t)}" y="${H-8}" text-anchor="middle" font-size="11" fill="var(--muted)">${fmtD(t)}</text>`);
+  const path=xs.map((t,i)=>`${i?"L":"M"}${X(t).toFixed(1)},${Y(ys[i]).toFixed(1)}`).join("");
+  const area=pts.length>1?`<path d="${path}L${X(xs.at(-1))},${Y(y0)}L${X(xs[0])},${Y(y0)}Z" fill="var(--accent)" opacity=".08"/>`:"";
+  const dots=xs.map((t,i)=>`<circle cx="${X(t)}" cy="${Y(ys[i])}" r="${i===xs.length-1?5:4}" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>`).join("");
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="AT ao longo do tempo">${g}${area}<path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>${dots}<line id="cx" y1="${m.t}" y2="${H-m.b}" stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/><rect x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent" id="hit"/></svg><div class="tip" id="tip" hidden></div>`;
+  const svg=box.querySelector("svg"),tip=box.querySelector("#tip"),cx=box.querySelector("#cx");
+  svg.querySelector("#hit").addEventListener("mousemove",e=>{const r=svg.getBoundingClientRect();const sx=(e.clientX-r.left)/r.width*W;let bi=0,bd=1e18;xs.forEach((t,i)=>{const d=Math.abs(X(t)-sx);if(d<bd){bd=d;bi=i}});
+    cx.setAttribute("x1",X(xs[bi]));cx.setAttribute("x2",X(xs[bi]));cx.setAttribute("visibility","visible");tip.hidden=false;tip.style.left=(X(xs[bi])/W*r.width)+"px";tip.style.top=(Y(ys[bi])/H*r.height)+"px";tip.textContent=`${fmtD(xs[bi])}: ${fmtAT(ys[bi])}`});
+  svg.querySelector("#hit").addEventListener("mouseleave",()=>{tip.hidden=true;cx.setAttribute("visibility","hidden")})}
+function histTodos(){const cs=catalog().filter(ch=>S.hist[ch.id]?.pontos?.length);
+  const datas=[...new Set(cs.flatMap(ch=>S.hist[ch.id].pontos.map(p=>p.d)))].sort();
+  const serie=datas.map(d=>{let at=0;for(const ch of cs){const ps=S.hist[ch.id].pontos;let v=null;for(const p of ps){if(p.d<=d)v=p.at;else break}if(v!=null)at+=+v||0}return {d,at}});
+  const linhas=cs.map(ch=>{const ps=S.hist[ch.id].pontos;const a0=+ps[0].at||0,a1=+ps.at(-1).at||0;return {ch,a0,a1,dv:a1-a0,d0:ps[0].d,d1:ps.at(-1).d,n:ps.length}}).sort((a,b)=>b.dv-a.dv||b.a1-a.a1);
+  return {serie,linhas,ini:serie[0]?.at||0,fim:serie.at(-1)?.at||0}}
+/* gráfico com uma linha por personagem (aba Histórico, opção Todos) */
+const COR_RESERVA=["#6AA8FF","#FF8E84","#F7D56A","#7FD8A0","#C9B6FF","#FF6CC0","#7FD8FF","#FFB86B"];
+function corChar(ch){return ch?.cor||COR_RESERVA[((ch?.ordem||1)-1)%COR_RESERVA.length]}
+try{const h=JSON.parse(localStorage.getItem("gc-hist")||"{}");S.histOff=new Set(h.off||[])}catch{S.histOff=new Set()}S.histModo="var";
+function saveHistPref(){try{localStorage.setItem("gc-hist",JSON.stringify({off:[...S.histOff],modo:S.histModo}))}catch{}}
+function drawMulti(){const box=document.getElementById("chart2");if(!box)return;
+  const linhas=catalog().filter(ch=>!S.histOff.has(ch.id)&&S.hist[ch.id]?.pontos?.some(p=>p.at!=null)).map(ch=>{const ps=S.hist[ch.id].pontos.filter(p=>p.at!=null);const a0=+ps[0].at||0;
+    return {ch,cor:corChar(ch),ps:ps.map(p=>({t:new Date(p.d+"T12:00").getTime(),v:S.histModo==="var"?(+p.at||0)-a0:+p.at||0}))}});
+  if(!linhas.length){box.innerHTML='<div class="muted small" style="padding:24px 0;text-align:center">Nenhum personagem selecionado.</div>';return}
+  const W=760,H=380,m={l:64,r:18,t:16,b:30};const all=linhas.flatMap(l=>l.ps);const xs=[...new Set(all.map(p=>p.t))].sort((a,b)=>a-b);const ys=all.map(p=>p.v);
+  let y0=Math.min(...ys),y1=Math.max(...ys);if(y0===y1){y0-=Math.abs(y0)*.05||1;y1+=Math.abs(y1)*.05||1}const pad=(y1-y0)*.08;y0-=pad;y1+=pad;if(S.histModo==="at")y0=Math.max(0,y0);
+  /* escala fina: ~10 faixas (ex.: de 50 em 50 K) */
+  const step=Math.max(1,niceStep((y1-y0)/10));y0=Math.floor(y0/step)*step;y1=Math.ceil(y1/step)*step;
+  const x0=xs[0],x1=xs.at(-1)===x0?x0+864e5:xs.at(-1);
+  const X=t=>m.l+(t-x0)/(x1-x0)*(W-m.l-m.r),Y=v=>m.t+(1-(v-y0)/(y1-y0))*(H-m.t-m.b);
+  const sinal=v=>(S.histModo==="var"&&v>0?"+":"")+Math.round(v).toLocaleString("pt-BR")+" K";
+  let g="";for(let v=y0;v<=y1+1e-9;v+=step)g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="${Math.abs(v)<1e-9&&S.histModo==="var"?2:1}"/><text x="${m.l-8}" y="${Y(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${sinal(v)}</text>`;
+  const fmtD=t=>{const d=new Date(t);return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}`};
+  const ticks=xs.length<=8?xs:[0,.25,.5,.75,1].map(f=>xs[Math.round(f*(xs.length-1))]);
+  ticks.forEach(t=>g+=`<text x="${X(t)}" y="${H-8}" text-anchor="middle" font-size="11" fill="var(--muted)">${fmtD(t)}</text>`);
+  const ls=linhas.map(l=>{const d=l.ps.map((p,i)=>`${i?"L":"M"}${X(p.t).toFixed(1)},${Y(p.v).toFixed(1)}`).join("");const last=l.ps.at(-1);
+    return `<g class="ml" data-id="${l.ch.id}"><title>${esc(l.ch.nome)}</title><path d="${d}" fill="none" stroke="${esc(l.cor)}" stroke-width="2" stroke-linejoin="round"/>${l.ps.map(p=>`<circle cx="${X(p.t)}" cy="${Y(p.v)}" r="${p===last?3.5:2.5}" fill="${esc(l.cor)}"/>`).join("")}</g>`}).join("");
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="AT de cada personagem ao longo do tempo">${g}${ls}<line id="cx2" y1="${m.t}" y2="${H-m.b}" stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/><rect x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent" id="hit2"/></svg><div class="tip tipm" id="tip2" hidden></div>`;
+  const svg=box.querySelector("svg"),tip=box.querySelector("#tip2"),cx=box.querySelector("#cx2"),hit=svg.querySelector("#hit2");
+  hit.addEventListener("mousemove",e=>{const r=svg.getBoundingClientRect();const sx=(e.clientX-r.left)/r.width*W;let t=xs[0],bd=1e18;xs.forEach(x=>{const d=Math.abs(X(x)-sx);if(d<bd){bd=d;t=x}});
+    const vals=linhas.map(l=>{let v=null;for(const p of l.ps){if(p.t<=t)v=p.v;else break}return {l,v}}).filter(x=>x.v!=null).sort((a,b)=>b.v-a.v);
+    cx.setAttribute("x1",X(t));cx.setAttribute("x2",X(t));cx.setAttribute("visibility","visible");tip.hidden=false;
+    const px=X(t)/W*r.width;tip.style.left=px+"px";tip.style.top="0px";tip.style.transform=`translate(${px>r.width/2?"calc(-100% - 12px)":"12px"},0)`;
+    tip.innerHTML=`<b>${fmtD(t)}</b>`+vals.map(x=>`<div><span class="legend-dot" style="background:${esc(x.l.cor)}"></span>${esc(x.l.ch.nome)}: ${sinal(x.v)}</div>`).join("")});
+  hit.addEventListener("mouseleave",()=>{tip.hidden=true;cx.setAttribute("visibility","hidden")})}
+function niceStep(r){const p=Math.pow(10,Math.floor(Math.log10(r||1)));const f=r/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p}
+
+/* ---------------- Eventos ---------------- */
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-act]");if(!t)return;const a=t.dataset.act;
+  if(a==="closeprint-bg"&&e.target!==t)return;
+  if(a==="go"){if(!(await leaveChar()))return;S.view=t.dataset.v;window.scrollTo(0,0);render()}
+  else if(a==="open"){openChar(t.dataset.id)}
+  else if(a==="tab"){S.tab=t.dataset.t;render()}
+  else if(a==="rank"){S.rank=t.dataset.t;render()}
+  else if(a==="save"){await saveDraft()}
+  else if(a==="discard"){S.draft=draftOf(S.charId);S.dirty=false;render()}
+  else if(a==="joiaadd"){S.draft.joias.push({tipo:"Brinco",tier:"RARO",equipado:false});S.dirty=true;render()}
+  else if(a==="joiadel"){S.draft.joias.splice(+t.dataset.i,1);S.dirty=true;render()}
+  else if(a==="print"){S.print={mode:"tooltip",piece:t.dataset.p,file:null,url:null,status:"idle"};renderOverlay()}
+  else if(a==="printno"){S.print={mode:"no",grupo:"g1",piece:"ELMO",file:null,url:null,status:"idle"};renderOverlay()}
+  else if(a==="charnav"){gotoChar(+t.dataset.d)}
+  else if(a==="forjaver"){window.scrollTo(0,0);setForja({ch:t.dataset.id})}
+  else if(a==="histmodo"){S.histModo=t.dataset.v==="var"?"var":"at";saveHistPref();render()}
+  else if(a==="histtog"){const id=t.dataset.id;if(S.histOff.has(id))S.histOff.delete(id);else S.histOff.add(id);saveHistPref();render()}
+  else if(a==="histvis"){S.histOff=t.dataset.v==="none"?new Set(catalog().map(c=>c.id)):new Set();saveHistPref();render()}
+  else if(a==="histopen"){S.histChar=t.dataset.id;window.scrollTo(0,0);render()}
+  else if(a==="bulkapply"){await bulkApply()}
+  else if(a==="bulkall"){S.bulk.sel=catalog().map(c=>c.id);render()}
+  else if(a==="bulknone"){S.bulk.sel=[];render()}
+  else if(a==="newrec"){S.newRec={nome:""};render()}
+  else if(a==="nrcancel"){S.newRec=null;render()}
+  else if(a==="nrsave"){await saveNovoRecurso()}
+  else if(a==="recmove"){await moveRecurso(t.dataset.id,+t.dataset.d)}
+  else if(a==="nicksave"){await saveNickNovo()}
+  else if(a==="nicklater"){S.nickLater=true;S.askNick=false;renderOverlay();toast("Você pode cadastrar depois em Dados → Seu nick no jogo.")}
+  else if(a==="psort"){setPsort(t.dataset.k)}
+  else if(a==="printopen"){S.print={mode:"equip",piece:"ELMO",file:null,url:null,status:"idle"};renderOverlay()}
+  else if(a==="printmode"){if(S.print&&S.print.status!=="loading"){Object.assign(S.print,{mode:t.dataset.m,diff:null,joia:null,error:""});renderOverlay()}}
+  else if(a==="closeprint"||a==="closeprint-bg"){if(S.print?.url)URL.revokeObjectURL(S.print.url);S.print=null;renderOverlay()}
+  else if(a==="printread"){await readPrint()}
+  else if(a==="printapply"){applyPrint()}
+  else if(a==="impsave"){await importSave()}
+  else if(a==="impcancel"){S.imp=null;render()}
+  else if(a==="export"){await exportXlsx()}
+  else if(a==="nick"){await saveNick()}
+  else if(a==="newchar"){S.newChar={nome:"",arma2:false};render()}
+  else if(a==="nccancel"){S.newChar=null;render()}
+  else if(a==="ncsave"){await saveNewChar()}
+  else if(a==="catmove"){await moveChar(t.dataset.id,+t.dataset.d)}
+});
+document.addEventListener("change",async e=>{const t=e.target;
+  if(t.dataset.path&&S.view==="char"&&S.draft){let v=t.type==="checkbox"?t.checked:t.value;if(t.dataset.num)v=v===""?null:+v;
+    if(v!=null&&t.dataset.min!=null&&t.dataset.max!=null){const mn=+t.dataset.min,mx=+t.dataset.max;if(foraFaixa(v,mn,mx)){const aj=Math.min(mx,Math.max(mn,v));toast(`${fmtNum(v,2).replace(/,00$/,"")} está fora da faixa (${fmtNum(mn,2).replace(/,00$/,"")} ~ ${fmtNum(mx,2).replace(/,00$/,"")}). Ajustei para ${fmtNum(aj,2).replace(/,00$/,"")}.`);v=aj}}
+    if(t.dataset.path==="anel"||t.dataset.path==="tornozeleira")v=+v;
+    if(t.dataset.path.startsWith("pet.pedras."))v=v===""?null:+v;setPath(S.draft,t.dataset.path,v);S.dirty=true;
+    setTimeout(()=>{const y=window.scrollY;render();window.scrollTo(0,y)},0);return}
+  const a=t.dataset.act;
+  if(a==="filtro"){S.filtro=t.value;render()}
+  else if(a==="pquem"||a==="pord"){S.painel[a==="pquem"?"quem":"ord"]=t.value;try{localStorage.setItem("gc-painel",JSON.stringify(S.painel))}catch{}render()}
+  else if(a==="histchar"){S.histChar=t.value;render()}
+  else if(a==="pedra"){S.pedra[t.dataset.k]=t.value;render()}
+  else if(a==="petstone"){await savePetStone(t.dataset.id,t.dataset.cor,t.value===""?null:+t.value)}
+  else if(a==="impfile"){if(t.files[0])await importParse(t.files[0])}
+  else if(a==="printfile"){if(t.files[0])setPrintFile(t.files[0])}
+  else if(a==="printgrupo"&&S.print){S.print.grupo=t.value;if(S.print.result)buildPrintDiff();renderOverlay()}
+  else if(a==="charjump"){if(S.dirty){t.value=S.charId;toast("Salve ou descarte as alterações antes de trocar de personagem.");return}openChar(t.value,true)}
+  else if(a==="printpiece"&&S.print){S.print.piece=t.value;S.print.diff=null;renderOverlay()}
+  else if(a==="printjoiaeq"&&S.print?.joia){S.print.joia.equipado=t.checked}
+  else if(a==="catflag"){await updateCatalog(t.dataset.id,{[t.dataset.k]:t.checked})}
+  else if(a==="cattexto"){await updateCatalog(t.dataset.id,{texto:t.value==="auto"?null:t.value})}
+  else if(a==="invconta"){const v=t.value===""?null:Math.max(0,Math.round(+t.value));await saveInvConta(t.dataset.r,v)}
+  else if(a==="invchar"){const v=t.value===""?null:Math.max(0,Math.round(+t.value));await saveInvChar(t.dataset.id,t.dataset.r,v)}
+  else if(a==="recnome"){const v=t.value.trim();if(v)await updateRecurso(t.dataset.id,{nome:v});else render()}
+  else if(a==="recescopo"){await updateRecurso(t.dataset.id,{escopo:t.value})}
+  else if(a==="recativo"){await updateRecurso(t.dataset.id,{ativo:t.checked})}
+  else if(a==="forjaitem"){setForja({item:t.value,alvo:"max"})}
+  else if(a==="forjaalvo"){setForja({alvo:t.value})}
+  else if(a==="forjach"){setForja({ch:t.value})}
+  else if(a==="bulkset"&&S.bulk){S.bulk[t.dataset.k]=t.value;if(t.dataset.k!=="q")render()}
+  else if(a==="bulktoggle"&&S.bulk){const s=new Set(S.bulk.sel);t.checked?s.add(t.dataset.id):s.delete(t.dataset.id);S.bulk.sel=catalog().map(c=>c.id).filter(id=>s.has(id));render()}
+  else if(a==="catcolor"){await updateCatalog(t.dataset.id,{cor:t.value.toUpperCase()})}
+  else if(a==="catimg"){if(t.files[0])await uploadCharImg(t.dataset.id,t.files[0])}
+  else if(t.id==="nc_nome"&&S.newChar){S.newChar.nome=t.value}
+  else if(t.id==="nc_a2"&&S.newChar){S.newChar.arma2=t.checked}
+  else if(t.id==="nc_img"&&S.newChar){S.newChar.file=t.files[0]||null}
+});
+document.addEventListener("input",e=>{const t=e.target;if(t.id==="bk_q"&&S.bulk){S.bulk.q=t.value;const btn=document.querySelector('[data-act="bulkapply"]');if(btn&&!S.bulk.saving)btn.disabled=!(S.bulk.sel.length&&t.value!=="")}});
+document.addEventListener("dragover",e=>{if(e.target.closest?.("#drop"))e.preventDefault()});
+document.addEventListener("drop",e=>{const d=e.target.closest?.("#drop");if(!d)return;e.preventDefault();const f=e.dataTransfer.files[0];if(f)setPrintFile(f)});
+document.addEventListener("paste",e=>{if(!S.print)return;const f=[...(e.clipboardData?.files||[])].find(x=>x.type.startsWith("image/"));if(f)setPrintFile(f)});
+
+async function leaveChar(){if(S.view==="char"&&S.dirty){toast("Salve ou descarte as alterações antes de sair.");return false}return true}
+function gotoChar(d){if(S.view!=="char")return;if(S.dirty){toast("Salve ou descarte as alterações antes de trocar de personagem.");return}
+  const cs=catalog();const i=cs.findIndex(x=>x.id===S.charId);if(i<0||!cs.length)return;openChar(cs[(i+d+cs.length)%cs.length].id,true)}
+document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target?.id==="nickNovo"){e.preventDefault();saveNickNovo();return}if(S.view!=="char"||S.print||e.altKey||e.ctrlKey||e.metaKey)return;
+  if(e.target.closest?.("input,select,textarea,[contenteditable]"))return;
+  if(e.key==="ArrowLeft"){e.preventDefault();gotoChar(-1)}else if(e.key==="ArrowRight"){e.preventDefault();gotoChar(1)}});
+function draftOf(id){const d=charOf(id);d.joias=clone(joiasOf(d));return d}
+function openChar(id,keep){const y=window.scrollY;S.charId=id;S.draft=draftOf(id);S.dirty=false;S.view="char";if(!S.tab)S.tab="geral";render();window.scrollTo(0,keep?y:0)}
+
+/* ---------------- Gravação ---------------- */
+function canWrite(){if(!db||!S.uid){toast("Entre com a sua conta Google para salvar.");return false}return true}
+/* Firestore, organizado para gastar poucas leituras:
+   jogadores/<uid> = nick, inventário da conta e um resumo por personagem (ranking da guilda sai só daqui)
+   fichas/<uid>    = os personagens completos (só o dono lê a própria ficha)
+   historico/<uid> = pontos do histórico por personagem (lido só ao abrir o Histórico ou ao salvar) */
+function resumoOf(doc){const c=fullChar(doc),p=progress(c);return {at:c.at??null,brinco:c.brinco,piercing:c.piercing,anel:+c.anel||0,titulo:c.titulo||"",ok:p.ok,total:p.total}}
+async function loadHist(){if(S.histLoaded||!S.uid)return;if(!S.histLoading)S.histLoading=FB.getDoc(FB.doc(FB.db,"historico",S.uid)).then(s=>{S.hist=s.exists()?(s.data().h||{}):{};S.histLoaded=true}).catch(()=>{S.histLoading=null});await S.histLoading}
+function histPonto(id,doc){const c=fullChar(doc),p=progress(c);const pt={d:today(),at:+c.at||0,ok:p.ok,total:p.total};
+  const pts=[...(S.hist[id]?.pontos||[])];const last=pts.at(-1);
+  if(last&&last.d===pt.d){if(last.at===pt.at&&last.ok===pt.ok&&last.total===pt.total)return null;pts[pts.length-1]=pt}
+  else{if(last&&last.at===pt.at&&last.ok===pt.ok)return null;pts.push(pt)}
+  while(pts.length>400)pts.shift();return {pontos:pts}}
+/* grava vários personagens de uma vez: 1 gravação na ficha + 1 no resumo + 1 no histórico, não importa quantos */
+async function writeChars(lista){if(!lista.length)return;await loadHist();if(!S.histLoaded)throw {code:"unavailable"};
+  const {db:fdb,doc,writeBatch,FieldPath}=FB,b=writeBatch(fdb),ficha={},res={},hist={};
+  for(const [id,d] of lista){const body=clone(d);body.atualizadoEm=new Date().toISOString();ficha[id]=body;res[id]=resumoOf(body);const h=histPonto(id,body);if(h)hist[id]=h}
+  b.set(doc(fdb,"fichas",S.uid),{chars:ficha},{mergeFields:Object.keys(ficha).map(id=>new FieldPath("chars",id))});
+  b.set(doc(fdb,"jogadores",S.uid),{resumo:res},{mergeFields:Object.keys(res).map(id=>new FieldPath("resumo",id))});
+  if(Object.keys(hist).length)b.set(doc(fdb,"historico",S.uid),{h:hist},{mergeFields:Object.keys(hist).map(id=>new FieldPath("h",id))});
+  await b.commit();Object.assign(S.chars,ficha);Object.assign(S.hist,hist);const p=S.players[S.uid]||(S.players[S.uid]={});p.resumo={...(p.resumo||{}),...res}}
+async function writeChar(id,doc){await writeChars([[id,doc]])}
+async function ensurePlayer(){if(!S.players[S.uid]){const d={nick:"",criadoEm:new Date().toISOString()};S.players[S.uid]=d;await db.doc(`players/${S.uid}`).set(d)}}
+async function saveDraft(){if(!canWrite())return;
+  const chk=joiaCheck(S.draft.joias||[]);if(chk.errs.length){S.tab="geral";render();toast(chk.errs[0]);return}
+  S.draft.brinco=bestEquip(S.draft.joias,"Brinco");S.draft.piercing=bestEquip(S.draft.joias,"Piercing");
+  S.saving=true;renderOverlay();
+  try{await ensurePlayer();await writeChar(S.charId,S.draft);S.dirty=false;toast("Salvo")}catch(err){toast(errMsg(err))}finally{S.saving=false;render()}}
+async function savePetStone(id,cor,v){if(!canWrite())return;const c=charOf(id);c.pet.pedras[cor]=v;try{await ensurePlayer();await writeChar(id,c);render()}catch(err){toast(errMsg(err))}}
+async function saveNick(){if(!canWrite())return;const v=document.getElementById("nick").value.trim().slice(0,40);if(v&&Object.entries(S.players).some(([id,p])=>id!==S.uid&&norm(p?.nick)===norm(v))){toast("Esse nick já está sendo usado por outro jogador.");return}try{const d={...(S.players[S.uid]||{}),nick:v};S.players[S.uid]=d;await db.doc(`players/${S.uid}`).set(d);toast("Nick salvo")}catch(err){toast(errMsg(err))}}
+function errMsg(err){const c=err?.code;if(c==="permission-denied")return "Sem permissão para salvar isso.";if(c==="resource-exhausted")return "O limite diário grátis do banco acabou. Volta a funcionar amanhã.";if(c==="unavailable")return "Sem conexão com o banco. Tente de novo.";if(c==="invalid_argument")return "Você não tem permissão para salvar aqui.";if(c==="quota_exceeded")return "O banco de dados está cheio.";if(c==="resource_exhausted")return "Muitas gravações seguidas. Espere alguns segundos.";return "Não deu para salvar agora. Tente de novo."}
+
+/* ---------------- Catálogo (admin) ---------------- */
+function cfgBase(){return {...(S.cfg||{}),recursos:clone(recursosAll()),chars:clone(catalogAll()),vazio:clone(vazioRef()),cartas:{...DEFAULT_CARTAS,...(S.cfg?.cartas||{})}}}
+async function writeCfg(cfg){cfg.chars.forEach((c,i)=>c.ordem=i+1);await db.doc("config/reference").set(cfg);S.cfg=cfg}
+async function updateCatalog(id,patch){if(!db)return;const cfg=cfgBase();const c=cfg.chars.find(x=>x.id===id);if(!c)return;Object.assign(c,patch);try{await writeCfg(cfg);render()}catch(err){toast(errMsg(err))}}
+async function moveChar(id,d){const cfg=cfgBase();const i=cfg.chars.findIndex(x=>x.id===id),j=i+d;if(i<0||j<0||j>=cfg.chars.length)return;[cfg.chars[i],cfg.chars[j]]=[cfg.chars[j],cfg.chars[i]];try{await writeCfg(cfg);render()}catch(err){toast(errMsg(err))}}
+async function uploadCharImg(id,file){if(!assets){toast("Envio de imagem indisponível.");return}try{const r=await assets.upload(file);await updateCatalog(id,{img:r.id});toast("Imagem atualizada")}catch(err){toast(err?.code==="unsupported_type"?"Use PNG, JPG, WebP ou GIF.":"Não deu para enviar a imagem.")}}
+async function saveNewChar(){const n=S.newChar;n.nome=(document.getElementById("nc_nome")?.value||"").trim();n.arma2=!!document.getElementById("nc_a2")?.checked;n.cor=(document.getElementById("nc_cor")?.value||"").toUpperCase()||null;const tx=document.getElementById("nc_texto")?.value;n.texto=tx&&tx!=="auto"?tx:null;
+  if(!n.nome){n.error="Digite o nome.";render();return}const id=slug(n.nome);if(catalogAll().some(c=>c.id===id)){n.error="Já existe um personagem com esse nome.";render();return}
+  n.saving=true;n.error="";render();
+  try{let img=null;if(n.file&&assets){img=(await assets.upload(n.file)).id}const cfg=cfgBase();cfg.chars.push({id,nome:n.nome,arma2:n.arma2,img,cor:n.cor,texto:n.texto,ativo:true,ordem:cfg.chars.length+1});await writeCfg(cfg);S.newChar=null;toast(`${n.nome} cadastrado`);render()}
+  catch(err){n.saving=false;n.error=err?.code==="unsupported_type"?"Use PNG, JPG, WebP ou GIF.":errMsg(err);render()}}
+
+/* ---------------- Importação ---------------- */
+function grid(wb,name){const key=wb.SheetNames.find(n=>norm(n)===norm(name));if(!key)return null;return XLSX.utils.sheet_to_json(wb.Sheets[key],{header:1,raw:true,defval:null,blankrows:true})}
+function cellStr(v){return v==null?"":(typeof v==="string"?v:String(v)).trim()}
+function isName(v){return typeof v==="string"&&v.trim()!==""&&!v.startsWith("#")}
+function findCol(row,label){if(!row)return -1;const L=norm(label);return row.findIndex(v=>norm(v)===L)}
+function matchChar(name,catMap){return catMap[norm(name)]||null}
+async function importParse(file){S.imp={status:"loading"};render();
+  try{if(typeof XLSX==="undefined")throw new Error("A biblioteca de planilhas não carregou. Recarregue a página.");
+    const buf=await file.arrayBuffer();const wb=XLSX.read(buf,{type:"array",cellFormula:false,cellHTML:false,cellStyles:false});
+    const warnings=[];const cat=catalogAll();const catMap={};cat.forEach(c=>catMap[norm(c.nome)]=c);
+    const pers=grid(wb,"Personagens");const order=pers?pers.slice(1).map(r=>cellStr(r?.[0])).filter(Boolean):[];
+    const out={};const get=id=>out[id]||(out[id]=charOf(id));
+    const nameAt=(v,i)=>isName(v)?v.trim():order[i]||"";
+    // Controle
+    const C=grid(wb,"Controle");
+    if(C){const h1=C[0]||[],h2=C[1]||[];const col=l=>findCol(h1,l);
+      const cLv=col("Lv"),cAt=col("AT"),cBr=col("Brinco"),cPi=col("Piercing"),cAn=col("Anel"),cPet=col("PET"),cTit=col("Titulo"),cTor=col("Tornozeleira"),cAc=col("Acessórios");
+      const eqCols={};EQUIP.forEach(p=>{const i=findCol(h1,p.xl);if(i>=0)eqCols[p.id]=i});
+      const cj=h1.findIndex(v=>norm(v).startsWith("CONJUNTO"));const cjCols={};
+      if(cj>=0)for(let i=cj;i<cj+16&&i<h2.length;i++){const k=PIECE_BY_NORM[norm(h2[i])];if(k)cjCols[k]=i}
+      for(let r=2;r<C.length;r++){const row=C[r];if(!row)continue;const nm=nameAt(row[0],r-2);if(!nm)continue;const ch=matchChar(nm,catMap);
+        if(!ch){if(row.slice(1,6).some(v=>v!=null))warnings.push(`Controle: "${nm}" não está no cadastro de personagens e foi ignorado.`);continue}
+        const c=get(ch.id);
+        if(cLv>=0)c.lv=parseNum(row[cLv]);if(cAt>=0)c.at=parseNum(row[cAt]);
+        if(cBr>=0&&row[cBr]!=null)c.brinco=TIERS.find(t=>norm(t)===norm(row[cBr]))||"Nenhum";
+        if(cPi>=0&&row[cPi]!=null)c.piercing=TIERS.find(t=>norm(t)===norm(row[cPi]))||"Nenhum";
+        // a planilha só conhece o equipado: se ele mudou, troca os equipados e mantém o inventário
+        if(Array.isArray(c.joias)&&(norm(bestEquip(c.joias,"Brinco"))!==norm(c.brinco)||norm(bestEquip(c.joias,"Piercing"))!==norm(c.piercing))){
+          const inv=c.joias.filter(j=>!j.equipado);delete c.joias;c.joias=[...clone(joiasOf(c)),...inv]}
+        if(cAn>=0)c.anel=parseNumLoose(row[cAn])??0;
+        if(cPet>=0)c.pet.nome=cellStr(row[cPet]);if(cTit>=0)c.titulo=cellStr(row[cTit]);
+        if(cTor>=0)c.tornozeleira=parseNum(row[cTor])??0;
+        for(const [pid,i] of Object.entries(eqCols)){const s=c.pecas[pid];const n=v=>{const x=cellStr(v);return x===""||norm(x)==="N"?null:parseNum(x)};s.ct=n(row[i]);s.rf=n(row[i+1]);s.pr=n(row[i+2])}
+        if(cAc>=0)ACESS.forEach((p,k)=>{c.acess[p.id].nivel=parseNum(row[cAc+k])});
+        for(const [pid,i] of Object.entries(cjCols)){const v=CONJ.find(x=>norm(x)===norm(row[i]));if(!v)continue;if(c.pecas[pid])c.pecas[pid].conjunto=v;else if(c.acess[pid])c.acess[pid].conjunto=v}
+      }} else warnings.push("A aba Controle não foi encontrada.");
+    // O Que Fazer (linhas manuais)
+    const O=grid(wb,"O Que Fazer");
+    if(O){const hdr=O[0]||[];const man={SR:"sr",COLAR:"colar","DESPERTAR 2":"despertar2","DESPERTAR 3":"despertar3","DESPERTAR LIBERTO":"liberto"};
+      for(const row of O){const f=man[norm(row?.[0])];if(!f)continue;for(let j=1;j<row.length;j++){const nm=nameAt(hdr[j],j-1);const ch=nm&&matchChar(nm,catMap);if(!ch)continue;const v=norm(row[j]);get(ch.id)[f]=v==="OK"?"OK":v==="PARCIAL"?"Parcial":"Não"}}}
+    // Cartas
+    const K=grid(wb,"Cartas");
+    if(K){const h=K[0]||[];const cN=findCol(h,"Nome"),cP=findCol(h,"Peça"),c1=findCol(h,"Carta 1");
+      if(cN>=0&&cP>=0&&c1>=0)for(let r=1;r<K.length;r++){const row=K[r];if(!row)continue;const ch=matchChar(cellStr(row[cN]),catMap);const pid=PIECE_BY_NORM[norm(row[cP])];if(!ch||!pid||!pieceInfo(pid))continue;
+        const s=get(ch.id).pecas[pid];s.cartas=[0,1,2,3].map(k=>cellStr(row[c1+k]))}
+      else warnings.push("A aba Cartas está num formato diferente e foi ignorada.")}
+    // Vazio
+    const V=grid(wb,"Vazio");
+    if(V){const h=V[0]||[];const cN=findCol(h,"Nome"),cP=findCol(h,"Peça");const pc={};PROPS.forEach(p=>{const i=findCol(h,p.label);if(i>=0)pc[p.id]=i});
+      if(cN>=0&&cP>=0)for(let r=2;r<V.length;r++){const row=V[r];if(!row)continue;const ch=matchChar(cellStr(row[cN]),catMap);const pid=PIECE_BY_NORM[norm(row[cP])];if(!ch||!pid||!pieceInfo(pid))continue;
+        const cc=get(ch.id),s=cc.pecas[pid]||cc.acess[pid];s.props=s.props||{};for(const [prid,i] of Object.entries(pc)){const v=parseNumLoose(row[i]);const q=QUAL.find(x=>norm(x)===norm(row[i+1]))||"";if(v==null&&!q){delete s.props[prid];continue}s.props[prid]={v,q}}}}
+    // Pets
+    const T=grid(wb,"Pets");
+    if(T){const hi=T.findIndex(r=>r&&r.some(v=>norm(v)==="VERMELHA")&&r.some(v=>norm(v)==="AMARELA"));if(hi>=0){const h=T[hi];const cN=findCol(h,"Nome")>=0?findCol(h,"Nome"):findCol(h,"Personagem");const cc={};CORES.forEach(([n])=>cc[n]=findCol(h,n));
+      for(let r=hi+2,k=0;r<T.length;r++,k++){const row=T[r];if(!row)continue;const nm=nameAt(row[cN],k);const ch=nm&&matchChar(nm,catMap);if(!ch)continue;const c=get(ch.id);
+        for(const [n,i] of Object.entries(cc)){if(i<0)continue;c.pet.pedras[n]=parsePedra(row[i])}}}}
+    // Despertar (aba gerada pela exportação: uma linha por nó)
+    const DS=grid(wb,"Despertar");
+    if(DS){const h=DS[0]||[];const cN=findCol(h,"Nome"),cT=findCol(h,"Trecho"),cK=findCol(h,"Nó"),cA=findCol(h,"Atributo"),cV=findCol(h,"Valor"),cQ=findCol(h,"Qualidade"),cS=findCol(h,"Despertar do trecho");
+      const KN={CRIACAO:"criacao",DESTRUICAO:"destruicao",HARMONIA:"harmonia"};
+      if(cN>=0&&cT>=0&&cK>=0)for(let r=1;r<DS.length;r++){const row=DS[r];if(!row)continue;const ch=matchChar(cellStr(row[cN]),catMap);const g="g"+parseNum(row[cT]);const k=KN[norm(row[cK]).replace(/^NO DE /,"")];
+        if(ch&&g==="g4"){const n=LIB.find(x=>norm(x.nome)===norm(row[cK]));if(!n)continue;const c=get(ch.id);c.nos=c.nos||{};c.nos.g4=c.nos.g4||{};
+          if(!n.tipo){if(cA>=0&&norm(row[cA])==="LIBERADO")c.nos.g4[n.k]="OK";else delete c.nos.g4[n.k]}
+          else{const attr=cA>=0?noAttrMatch(n.tipo,row[cA]):null;if(attr)c.nos.g4[n.k]={attr,v:cV>=0?parseNumLoose(row[cV]):null,q:NO_QUAL.find(q=>norm(q)===norm(row[cQ]))||""};else delete c.nos.g4[n.k]}
+          if(cS>=0&&cellStr(row[cS])!=="")c.liberto=norm(row[cS]).includes("LIBERADO")?"OK":"Não";continue}
+        if(!ch||!["g1","g2","g3"].includes(g)||!k)continue;const c=get(ch.id);c.nos=c.nos||{g1:{},g2:{},g3:{}};c.nos[g]=c.nos[g]||{};
+        const attr=cA>=0?noAttrMatch(k,row[cA]):null;if(attr)c.nos[g][k]={attr,v:cV>=0?parseNumLoose(row[cV]):null,q:NO_QUAL.find(q=>norm(q)===norm(row[cQ]))||""};else delete c.nos[g][k];
+        if(cS>=0&&row[cS]!=null&&cellStr(row[cS])!==""){const s=norm(row[cS]);c[`despertar${g.slice(1)}`]=(s.includes("LIBERADO")||s==="OK")?"OK":"Não"}}
+      else warnings.push("A aba Despertar está num formato diferente e foi ignorada.")}
+    // Inventário por personagem (colunas = nomes dos recursos individuais)
+    const IV=grid(wb,"Inventário");let contaImp=null;
+    if(IV){const h=IV[0]||[];const cN=findCol(h,"Nome");const cols=recursos("personagem").map(r=>[r.id,findCol(h,r.nome)]).filter(x=>x[1]>=0);
+      if(cN>=0)for(let r=1;r<IV.length;r++){const row=IV[r];if(!row)continue;const ch=matchChar(cellStr(row[cN]),catMap);if(!ch)continue;const c=get(ch.id);c.inventario={...(c.inventario||{})};
+        for(const [rid,i] of cols){const v=parseNum(row[i]);if(v==null)delete c.inventario[rid];else c.inventario[rid]=Math.max(0,Math.round(v))}}}
+    const IC=grid(wb,"Inventário da conta");
+    if(IC){contaImp={};for(let r=1;r<IC.length;r++){const row=IC[r];if(!row)continue;const rec=recursos("conta").find(x=>norm(x.nome)===norm(row[0]));if(!rec)continue;const v=parseNum(row[1]);if(v!=null)contaImp[rec.id]=Math.max(0,Math.round(v))}}
+    const preview=Object.entries(out).map(([id,c])=>({id,nome:catById(id)?.nome||id,doc:c,changes:countDiff(charOf(id),c)}));
+    if(!preview.length)throw new Error("Nenhum personagem do cadastro foi encontrado nessa planilha.");
+    S.imp={preview,warnings,done:0,conta:contaImp};render()}
+  catch(err){S.imp={error:err.message||"Não deu para ler essa planilha."};render()}}
+function countDiff(a,b){let n=0;const walk=(x,y)=>{if(x!==null&&typeof x==="object"||y!==null&&typeof y==="object"){const ks=new Set([...Object.keys(x||{}),...Object.keys(y||{})]);ks.forEach(k=>{if(k==="atualizadoEm")return;walk(x?.[k],y?.[k])})}else if((x??"")!==(y??""))n++};walk(a,b);return n}
+async function importSave(){if(!canWrite())return;const imp=S.imp;imp.saving=true;imp.done=0;render();
+  try{await ensurePlayer();if(imp.conta&&Object.keys(imp.conta).length){const p={...(S.players[S.uid]||{nick:""})};p.inventario={...(p.inventario||{}),...imp.conta};S.players[S.uid]=p;await db.doc(`players/${S.uid}`).set(p)}await writeChars(imp.preview.filter(x=>x.changes>0||!S.chars[x.id]).map(x=>[x.id,x.doc]));imp.done=imp.preview.length;render();
+    toast(`${imp.preview.length} personagens gravados`);S.imp=null;S.view="painel";render()}
+  catch(err){imp.saving=false;toast(errMsg(err));render()}}
+
+/* ---------------- Exportação ---------------- */
+/* formatação da planilha exportada (precisa da xlsx-js-style; com o SheetJS comum os estilos são ignorados) */
+const XL_COR = {
+  "OK":["C6EFCE","006100"],"Não":["EDEDED","7F7F7F"],"Parcial":["FFEB9C","9C5700"],
+  "Vazio":["F8C8DC","A0105F"],"Berkas":["E4D1F5","5B2C8B"],"Nenhum":[null,"8C8C8C"],
+  "Comum":["F2F2F2","595959"],"Raro":["DDEBFF","1F4E9E"],"Épico":["FFF2CC","7F6000"],"Lendário":["E9D8FD","5B2C8B"],"Ancestral":["FCD5EA","A0105F"],
+  "Triangular":["F2F2F2","595959"],"Losangular":["FFF2CC","7F6000"],"Hexagonal":["E2F0D9","385723"]
+};
+const XL_TIER = {RARO:"2F6FD6",EPICO:"B89300","LENDÁRIO":"7B3FB5",ORDEM:"0E8C7A",CAOS:"B3261E"};
+function estilizar(ws,aoa,o){const E=XLSX.utils.encode_cell,borda={style:"thin",color:{rgb:"D0D5DF"}},B={top:borda,bottom:borda,left:borda,right:borda};
+  const nR=aoa.length,nC=Math.max(...aoa.map(r=>r.length));const hdr=o.hdr||1;
+  const cab={font:{bold:true,color:{rgb:"FFFFFF"}},fill:{fgColor:{rgb:"232B3E"}},alignment:{horizontal:"center",vertical:"center",wrapText:true},border:B};
+  for(let r=0;r<nR;r++)for(let c=0;c<nC;c++){const ref=E({r,c});let cell=ws[ref];if(!cell){if(r>=hdr)continue;cell=ws[ref]={t:"s",v:""}}
+    if(r<hdr){cell.s=(o.sub&&r===1)?{font:{italic:true,color:{rgb:"595959"},sz:9},fill:{fgColor:{rgb:"EEF1F6"}},alignment:{horizontal:"center",wrapText:true},border:B}:cab;continue}
+    const s={border:B,alignment:{vertical:"center"}};
+    if(o.rowHead&&c===0){s.font={bold:true};s.fill={fgColor:{rgb:"EEF1F6"}}}
+    const v=cell.v;
+    if(typeof v==="string"){const k=XL_COR[v];if(k){if(k[0])s.fill={fgColor:{rgb:k[0]}};s.font={color:{rgb:k[1]},bold:v!=="Não"&&v!=="Nenhum"};s.alignment.horizontal="center"}
+      else if(XL_TIER[v]){s.font={bold:true,color:{rgb:XL_TIER[v]}};s.alignment.horizontal="center"}
+      else if(v.includes(": Liberado")){s.font={color:{rgb:"006100"}}}else if(v.includes(": Bloqueado")){s.font={color:{rgb:"7F7F7F"}}}}
+    if(typeof v==="number"){s.alignment.horizontal="right";if(o.fmt&&o.fmt[c])cell.z=o.fmt[c]}
+    if(c===0&&!o.rowHead&&r>=hdr)s.font={...(s.font||{}),bold:true};
+    cell.s=s}
+  if(o.merge&&hdr===2){const h1=aoa[0],h2=aoa[1];const m=[];for(let c=0;c<nC;c++){if(h1[c]==null||h1[c]==="")continue;let e=c;while(e+1<nC&&(h1[e+1]==null||h1[e+1]==="")&&h2[e+1]!=null&&h2[e+1]!=="")e++;
+      if(e>c)m.push({s:{r:0,c},e:{r:0,c:e}});else if(h2[c]==null||h2[c]==="")m.push({s:{r:0,c},e:{r:1,c}})}ws["!merges"]=m}
+  ws["!cols"]=Array.from({length:nC},(_,c)=>{let w=6;for(let r=0;r<nR;r++){const v=aoa[r][c];if(v!=null)w=Math.max(w,String(v).length+2)}return {wch:Math.min(w,44)}});
+  ws["!rows"]=Array.from({length:hdr},()=>({hpt:22}));
+  if(nR>hdr)ws["!autofilter"]={ref:XLSX.utils.encode_range({s:{r:hdr-1,c:0},e:{r:nR-1,c:nC-1}})}}
+async function exportXlsx(){if(!downloads)return;if(typeof XLSX==="undefined"){toast("A biblioteca de planilhas não carregou.");return}
+  const cs=catalog();const docs=cs.map(ch=>({ch,c:charOf(ch.id)}));const wb=XLSX.utils.book_new();
+  const add=(name,aoa,opt={})=>{const ws=XLSX.utils.aoa_to_sheet(aoa);estilizar(ws,aoa,{hdr:1,...opt});XLSX.utils.book_append_sheet(wb,ws,name)};
+  add("Personagens",[["Nome"],...cs.map(c=>[c.nome])]);
+  const eqOrder=["ELMO","COTA","LUVA","CALCA","BOTA","CAPA","ARMA","ARMA2"].map(id=>EQUIP.find(p=>p.id===id));
+  const cjOrder=[...["ELMO","COTA","CALCA","LUVA","BOTA","CAPA","ARMA","ARMA2"].map(id=>EQUIP.find(p=>p.id===id)),...ACESS];
+  const h1=["Personagem","Lv","AT","Brinco","Piercing","Anel"],h2=["","","","","",""];
+  eqOrder.forEach(p=>{h1.push(p.xl,"","");h2.push("CT","RF","PR")});h1.push("Acessórios","","","","");h2.push(...ACESS.map(a=>a.short));
+  h1.push("PET","Titulo","Conjunto (Nenhum / Berkas / Vazio)",...Array(cjOrder.length-1).fill(""),"Tornozeleira");h2.push("","",...cjOrder.map(p=>p.xl),"");
+  add("Controle",[h1,h2,...docs.map(({ch,c})=>{const r=[ch.nome,c.lv,c.at,c.brinco,c.piercing,c.anel];eqOrder.forEach(p=>{const s=c.pecas[p.id];const na=p.only2&&!ch.arma2;r.push(na?"N":s.ct,na?"N":s.rf,na?"N":s.pr)});
+    ACESS.forEach(a=>r.push(c.acess[a.id].nivel));r.push(c.pet.nome,c.titulo,...cjOrder.map(p=>(c.pecas[p.id]||c.acess[p.id]).conjunto),c.tornozeleira);return r})],{hdr:2,merge:true,fmt:{2:'0" K"',5:"0.0"}});
+  add("O Que Fazer",[["",...cs.map(c=>c.nome)],...METAS.map(m=>[m.xl,...docs.map(({c})=>{const v=m.test(c);return v===true?"OK":v==="parcial"?"Parcial":"Não"})])],{rowHead:true});
+  const kr=[["Nome","Peça","Carta 1","Carta 2","Carta 3","Carta 4"]];docs.forEach(({ch,c})=>EQUIP.filter(p=>!p.only2||ch.arma2).forEach(p=>kr.push([ch.nome,p.xl,...c.pecas[p.id].cartas])));add("Cartas",kr);
+  const vh1=["Nome","Peça","Conjunto"],vh2=["","",""];PROPS.forEach(p=>{vh1.push(p.label,"");vh2.push("Valor","Qualidade")});
+  const vr=[vh1,vh2];docs.forEach(({ch,c})=>[...EQUIP.filter(p=>!p.only2||ch.arma2),...ACESS].forEach(p=>{const s=c.pecas[p.id]||c.acess[p.id];const r=[ch.nome,p.xl,s.conjunto];PROPS.forEach(pr=>{const v=s.props?.[pr.id]||{};r.push(v.v??null,v.q||"")});vr.push(r)}));add("Vazio",vr,{hdr:2,merge:true,fmt:{3:"0",5:"0",7:"0.00",9:"0.00",11:"0.00"}});
+  add("Pets",[["Nome","Pet",...CORES.map(x=>x[0])],["","",...CORES.map(x=>x[2])],...docs.map(({ch,c})=>[ch.nome,c.pet.nome,...CORES.map(([n])=>tipoPedra(c.pet.pedras[n])||null)])],{hdr:2,sub:true});
+  const dr=[["Nome","Trecho","Nó","Atributo","Valor","Qualidade","Faixa (mín ~ máx)","Despertar do trecho"]];
+  docs.forEach(({ch,c})=>["g1","g2","g3"].forEach((g,gi)=>["criacao","destruicao","harmonia"].forEach(k=>{const v=noVal(c.nos?.[g]?.[k]),fx=v.attr?noFaixa(k,v.attr):null;
+    dr.push([ch.nome,gi+1,NO_TIPOS[k].label,v.attr||"",v.v??null,v.q||"",fx?`${fx[1]} ~ ${fx[2]}${fx[3]?"%":""}`:"",`Despertar ${gi+1}: ${c[`despertar${gi+1}`]==="OK"?"Liberado":"Bloqueado"}`])})));
+  docs.forEach(({ch,c})=>LIB.forEach(n=>{const st=`Liberto: ${c.liberto==="OK"?"Liberado":"Bloqueado"}`;
+    if(!n.tipo){dr.push([ch.nome,4,n.nome,c.nos?.g4?.[n.k]==="OK"?"Liberado":"",null,"","",st]);return}
+    const v=noVal(c.nos?.g4?.[n.k]),fx=v.attr?noFaixa(n.tipo,v.attr):null;dr.push([ch.nome,4,n.nome,v.attr||"",v.v??null,v.q||"",fx?`${fx[1]} ~ ${fx[2]}${fx[3]?"%":""}`:"",st])}));
+  add("Despertar",dr,{fmt:{4:"0.##"}});
+  const ri=recursos("personagem"),rc=recursos("conta");
+  add("Inventário",[["Nome",...ri.map(r=>r.nome)],...docs.map(({ch,c})=>[ch.nome,...ri.map(r=>c.inventario?.[r.id]??null)])],{fmt:Object.fromEntries(ri.map((_,i)=>[i+1,"#,##0"]))});
+  add("Inventário da conta",[["Recurso","Quantidade"],...rc.map(r=>[r.nome,invConta()[r.id]??null])],{fmt:{1:"#,##0"}});
+  const data=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+  try{await downloads.save({filename:`GC Tracker ${today()}.xlsx`,data:new Uint8Array(data)});toast("Planilha exportada")}
+  catch(err){if(err?.code!=="declined")toast("Não deu para exportar agora.")}}
+
+/* ---------------- Ler print ---------------- */
+function setPrintFile(f){if(!S.print)return;if(S.print.url)URL.revokeObjectURL(S.print.url);Object.assign(S.print,{file:f,url:URL.createObjectURL(f),diff:null,joia:null,error:"",status:"idle"});renderOverlay()}
+const BRINCO_NOMES_TXT = TIERS.filter(t=>t!=="Nenhum").map(t=>`${NOMES.brinco[t]} / ${NOMES.piercing[t]} = ${t}`).join("; ");
+function printPrompt(P){const ch=catById(S.charId);
+  if(P.mode==="tooltip"){const pi=pieceInfo(P.piece),piece=pi.p;const L=pi.acess?["Nenhuma das top"]:cartas(piece.cards);
+    return `Você está lendo um print do jogo Grand Chase Classic com o tooltip de um item aberto (painel escuro translúcido: nome do item no topo em rosa, depois personagem, tipo, LV e a raridade à direita; depois [Propriedade] com linhas em azul).
+Responda SOMENTE com um objeto JSON:
+{"tipo": "equipamento"|"brinco"|"piercing", "nomeItem": string, "personagem": string|null,
+ "tierItem": "RARO"|"EPICO"|"LENDÁRIO"|"ORDEM"|"CAOS"|null,
+ "conjunto": "Vazio"|"Berkas"|null, "refino": number|null, "cartas": [string],
+ "propriedades": [{"nome": string, "valor": number, "qualidade": "Comum"|"Raro"|"Épico"|"Lendário"|"Ancestral"}]}
+Regras:
+- Brincos e piercings: o nome do item define o tier. Nomes: ${BRINCO_NOMES_TXT}. O tipo é "piercing" se o nome começar com "Piercing" (a linha de tipo do tooltip diz "Brincos" para os dois; ignore essa linha).
+- Equipamento ou acessório (esperado: ${piece.label}${pi.acess?", um acessório: Diadema, Máscara, Asas, Facas ou Escudo; acessórios não têm refino nem cartas":""}): "refino" é o +N do nome, ex.: "(+18) Luvas do Absoluto do Vazio" → 18. "conjunto": "Vazio" se o nome tiver "Vazio"; "Berkas" se tiver "Berkas".
+- "propriedades": só a seção [Propriedade], sem Fortificação nem cartas. "Dano de Ataque pelas Costas" = "Ataque Costas". Números com ponto decimal (3.33).
+- Qualidade = COR do texto da propriedade: branco = Comum, azul = Raro, amarelo = Épico, roxo ou vermelho = Lendário, rosa/magenta = Ancestral.
+- "cartas" (só equipamento): uma entrada por carta encaixada (ícones de carta acima de [Propriedade], cada uma com o efeito, ex.: "Dano Crítico + 31.50%"). Para cada uma escolha exatamente um item desta lista: ${JSON.stringify(L)}. Use "Nenhuma das top" se não bater. Máximo 4.`}
+  if(P.mode==="equip")return `Você está lendo um print do jogo Grand Chase Classic: a aba de equipamento do Inventário${ch?` do personagem ${ch.nome}`:""}.
+Layout: o personagem no centro; à esquerda, uma coluna de 6 slots de equipamento; no canto superior direito, 2 slots de arma; à direita, uma grade de acessórios (ignore a grade). Embaixo, o painel "Status" com "Ataque Total", e ao lado o painel "Título".
+Responda SOMENTE com um objeto JSON:
+{"ataqueTotal": number|null, "titulo": string|null,
+ "pecas": {"ELMO": {"refino": number|null, "conjunto": "Vazio"|"Berkas"|null}, "COTA": {...}, "CALCA": {...}, "LUVA": {...}, "BOTA": {...}, "CAPA": {...}, "ARMA": {...}}}
+Regras:
+- "ataqueTotal": o número inteiro ao lado de "Ataque Total" no painel Status (ex.: 1391166). Não é "Ataque".
+- "titulo": o texto dentro do painel Título (ex.: "(Verdadeiro) Aniquilador do Vazio").
+- Identifique cada slot da coluna esquerda pelo desenho do item: ELMO = capacete/cabelo/chapéu, COTA = armadura de tronco, CALCA = calça/saia, LUVA = luvas/garras, BOTA = botas, CAPA = capa/asas. Normalmente estão nessa ordem de cima para baixo. ARMA = o primeiro slot de arma no canto superior direito (o que tem +N).
+- "refino": o número "+N" no canto do slot (ex.: +18). Sem número → null.
+- "conjunto" pela COR DE FUNDO do slot: rosa/salmão = "Vazio"; roxo/lilás = "Berkas"; outra cor ou incerto → null.`;
+  if(P.mode==="no")return `Você está lendo um print do jogo Grand Chase Classic: a janela de um nó do despertar, com o título "[Núcleo de Apoio da Criação]", "[Núcleo de Apoio da Destruição]" ou "[Núcleo de Apoio da Harmonia]".
+A caixa "Propriedade E…" (equipada) mostra a raridade à direita (Comum, Raro, Épico, Lendário ou Ancestral) e, embaixo, o atributo atual com o valor (ex.: "Ataque Especial + 618", "Dano Crítico + 21.73%"). A caixa "Alterar Propri…" é uma troca pendente: IGNORE. A "Lista de Propriedades" só mostra as faixas: ignore também.
+Responda SOMENTE com um objeto JSON:
+{"tipo": "criacao"|"destruicao"|"harmonia", "atributo": string, "valor": number, "qualidade": "Comum"|"Raro"|"Épico"|"Lendário"|"Ancestral"|null}
+"valor" sem o símbolo %, com ponto decimal (21.73).`;
+  if(P.mode==="pet")return `Você está lendo um print do jogo Grand Chase Classic: o Livro das Pedras Mágicas ("Página Mágica") de um mascote aberto.
+Na página esquerda há um pentagrama com 5 encaixes de pedra por cor: topo = Vermelha, esquerda = Amarela (laranja), direita = Verde, embaixo à esquerda = Azul, embaixo à direita = Roxa (violeta). A lista da página direita é o inventário de pedras: IGNORE essa lista.
+O TIPO de cada pedra equipada é o FORMATO da gema no encaixe: hexágono (6 lados) = "Hexagonal"; losango/diamante (4 pontas) = "Losangular"; triângulo = "Triangular". Encaixe vazio = null. (No jogo: "Comum" = Triangular, "Avançada" = Losangular.)
+O nome do mascote costuma aparecer no canto superior esquerdo, fora do livro (ex.: "Claunel").
+Responda SOMENTE com um objeto JSON:
+{"pet": string|null, "pedras": {"Vermelha": "Hexagonal"|"Losangular"|"Triangular"|null, "Amarela": ..., "Azul": ..., "Roxa": ..., "Verde": ...}}`;
+  return `Você está lendo um print do jogo Grand Chase Classic: a Árvore de Talentos na aba DESPERTAR.
+O caminho de nós é sempre: Skill de 4ª Barra (nó GRANDE) → Criação → Destruição → Harmonia → Despertar 1 (GRANDE) → Criação → Destruição → Harmonia → Despertar 2 (GRANDE) → Criação → Destruição → Harmonia → Despertar 3 (GRANDE). Nó com CADEADO = bloqueado.
+Se o painel "Atributos Ativos" estiver aberto (lista à direita), USE-O, porque ele é a fonte mais confiável:
+- "[Núcleo Principal]": uma linha por nó grande liberado (4ª Barra + despertares). 4 linhas = Despertar 1, 2 e 3 liberados; 3 linhas = 1 e 2; 2 linhas = só o 1; 1 linha = nenhum.
+- "[Núcleo de Apoio]": uma linha por nó pequeno liberado, NA ORDEM DO CAMINHO (1ª = Criação do trecho 1, 2ª = Destruição do trecho 1, 3ª = Harmonia do trecho 1, 4ª = Criação do trecho 2, e assim por diante, até 9).
+- O pequeno losango antes de cada linha tem a COR DA QUALIDADE (a mesma cor da borda do nó na árvore): dourado/amarelo = "Épico", lilás/roxo = "Lendário", vermelho/rosa = "Ancestral", azul = "Raro", branco/cinza = "Comum".
+Sem o painel, olhe a árvore: nó grande com ícone colorido = liberado; a cor da borda de cada nó pequeno = qualidade (mesma tabela).
+Responda SOMENTE com um objeto JSON:
+{"despertar1": true|false|null, "despertar2": true|false|null, "despertar3": true|false|null,
+ "apoio": [{"atributo": string, "valor": number, "cor": "dourado"|"lilas"|"vermelho"|"azul"|"branco"|null}]}
+"apoio" em ordem, só os nós liberados (vazio se não der para ler). "valor" sem %, com ponto decimal (26.83).`}
+function imgAviso(){const st=S.imgState||(typeof claude==="undefined"?"sem-claude":"carregando");
+  const msg={"sem-claude":"Abra a página pelo claude.ai para usar a leitura de print.",carregando:"Ainda conectando com o Claude… espere alguns segundos.","sem-sample":"Esta visualização não permite que a página use o Claude. Abra o artifact direto pelo claude.ai (não pela prévia) e tente de novo.","sem-imagens":"Esta visualização diz que não aceita imagens, mas você pode tentar mesmo assim: se não funcionar, aparece o motivo.","sem-limits":"Não consegui confirmar se esta visualização aceita imagens. Pode tentar: se não funcionar, aparece o motivo."}[st];
+  return msg?`<div class="small" style="color:${st==="sem-sample"||st==="sem-claude"?"var(--t-caos)":"var(--partial)"}">${esc(msg)}</div>`:""}
+function printErr(err){const c=err?.code;return c==="not_granted"||c==="sampling_disabled"?"A leitura pelo Claude não foi autorizada nesta visualização.":c==="rate_limited"?"Muitas leituras seguidas. Espere um pouco e tente de novo.":c==="image_rejected"?"Esse arquivo não pôde ser usado. Tente um PNG ou JPG.":c==="images_unavailable"?"Esta visualização não aceita enviar imagens ao Claude. Tente pelo claude.ai no navegador do computador.":c==="invalid_json"?"Não consegui entender a resposta. Tente um print mais nítido.":"Não deu para ler o print agora. Tente de novo."}
+async function readPrint(){const P=S.print;if(!P?.file||!sample)return;P.status="loading";P.error="";renderOverlay();
+  try{const r=await sample.json(printPrompt(P),{images:[P.file],modelTier:"default"});P.status="done";P.result=r;buildPrintDiff();renderOverlay()}
+  catch(err){P.status="idle";P.error=printErr(err)+(err?.code?` (código: ${err.code})`:"");renderOverlay()}}
+function buildPrintDiff(){const P=S.print,r=P.result||{},d=S.draft,diff=[],patch=[],notes=[];P.joia=null;
+  const push=(label,path,old,nw,shown)=>{if(nw==null||nw===""||String(old??"")===String(nw))return;diff.push({label,old:(old==null||old==="")?"—":old,nw:shown??nw});patch.push([path,nw])};
+  const nomeCh=catById(S.charId)?.nome;if(r.personagem&&norm(r.personagem)!==norm(nomeCh))notes.push(`O print parece ser de ${r.personagem}, não de ${nomeCh}.`);
+  if(P.mode==="tooltip"&&(r.tipo==="brinco"||r.tipo==="piercing")){const tipo=r.tipo==="piercing"?"Piercing":"Brinco";
+    const tier=JOIA_TIERS.find(t=>norm(t)===norm(r.tierItem))||JOIA_TIERS.find(t=>norm(NOMES[tipo.toLowerCase()][t])===norm(r.nomeItem));
+    if(!tier){notes.push(`Não reconheci o tier de "${r.nomeItem||"?"}".`)}
+    else{const nome=NOMES[tipo.toLowerCase()][tier];const ja=(d.joias||[]).some(j=>j.tipo===tipo&&norm(j.tier)===norm(tier));
+      P.joia={tipo,tier,equipado:false};diff.push({label:"Adicionar à lista",old:ja?"já tem um igual":"—",nw:`${nome} (${TIER_LABEL[tier]})`});}}
+  else if(P.mode==="tooltip"){const pi=pieceInfo(P.piece),B=pi.base,s=getPath(d,B);const L=pi.acess?[]:cartas(pi.p.cards);
+    if(r.conjunto&&CONJ.includes(r.conjunto))push("Conjunto",`${B}.conjunto`,s.conjunto,r.conjunto);
+    if(!pi.acess&&typeof r.refino==="number")push("Refino (RF)",`${B}.rf`,s.rf,r.refino);
+    if(!pi.acess&&Array.isArray(r.cartas)&&r.cartas.length){const cs=r.cartas.slice(0,4).map(x=>L.includes(x)?x:"Nenhuma das top");while(cs.length<4)cs.push("");cs.forEach((x,i)=>push(`Carta ${i+1}`,`${B}.cartas.${i}`,s.cartas[i],x));push("Cartas (CT)",`${B}.ct`,s.ct,r.cartas.slice(0,4).length)}
+    const ignored=[];(r.propriedades||[]).forEach(p=>{const pr=PROPS.find(x=>norm(x.label)===norm(p.nome)||norm(x.key)===norm(p.nome));if(!pr){if(p?.nome)ignored.push(p.nome);return}
+      const v=typeof p.valor==="number"?p.valor:parseNumLoose(p.valor);const cur=s.props?.[pr.id]||{};if(v!=null)push(pr.label,`${B}.props.${pr.id}.v`,cur.v,v,fmtNum(v,pr.dec));
+      if(QUAL.includes(p.qualidade))push(`${pr.label}: qualidade`,`${B}.props.${pr.id}.q`,cur.q,p.qualidade)});
+    if(ignored.length)notes.push(`Propriedades fora das 5 principais, não usadas: ${ignored.join(", ")}.`)}
+  else if(P.mode==="equip"){const at=parseNumLoose(r.ataqueTotal);if(at)push("Ataque total (K)","at",d.at,Math.round(at/1000),fmtAT(Math.round(at/1000)));
+    if(r.titulo)push("Título","titulo",d.titulo,String(r.titulo).trim());
+    for(const [pid,v] of Object.entries(r.pecas||{})){const p=EQUIP.find(x=>x.id===pid);if(!p||!v)continue;const s=d.pecas[pid];
+      if(typeof v.refino==="number")push(`${p.label}: refino`,`pecas.${pid}.rf`,s.rf,v.refino);
+      if(v.conjunto&&CONJ.includes(v.conjunto))push(`${p.label}: conjunto`,`pecas.${pid}.conjunto`,s.conjunto,v.conjunto)}
+    notes.push("O conjunto vem da cor do slot (rosa = Vazio, roxo = Berkas). Confira se algum ficou trocado.")}
+  else if(P.mode==="pet"){if(r.pet)push("Nome do pet","pet.nome",d.pet.nome,String(r.pet).trim());
+    for(const [cor] of CORES){const t=r.pedras?.[cor];if(t===undefined)continue;const n=t==null?null:parsePedra(t);
+      if(n==null&&!d.pet.pedras[cor])continue;if(n===(d.pet.pedras[cor]??null))continue;diff.push({label:`Pedra ${cor}`,old:tipoPedra(d.pet.pedras[cor])||"—",nw:n?tipoPedra(n):"Sem pedra"});patch.push([`pet.pedras.${cor}`,n])}}
+  else if(P.mode==="no"){const k=["criacao","destruicao","harmonia"].find(x=>x===r.tipo);if(!k){notes.push("Não reconheci o tipo do nó.")}else{
+    const g=P.grupo||"g1",cur=noVal(d.nos?.[g]?.[k]),attr=noAttrMatch(k,r.atributo);const base=`nos.${g}.${k}`,lbl=`${NO_TIPOS[k].label} (${{g1:"trecho 1",g2:"trecho 2",g3:"trecho 3"}[g]})`;
+    if(!attr)notes.push(`O atributo "${r.atributo||"?"}" não está na lista do ${NO_TIPOS[k].label}.`);
+    else{push(`${lbl}: atributo`,`${base}.attr`,cur.attr,attr);const v=parseNumLoose(r.valor);if(v!=null)push(`${lbl}: valor`,`${base}.v`,cur.v,v);if(NO_QUAL.includes(r.qualidade))push(`${lbl}: qualidade`,`${base}.q`,cur.q,r.qualidade);
+      const fx=noFaixa(k,attr);if(fx&&v!=null&&(v<fx[1]-1e-9||v>fx[2]+1e-9))notes.push(`O valor ${v} está fora da faixa ${fx[1]} ~ ${fx[2]}: confira.`)}}}
+  else if(P.mode==="despertar"){[1,2,3].forEach(n=>{const v=r[`despertar${n}`];if(typeof v!=="boolean")return;push(`Despertar ${n}`,`despertar${n}`,d[`despertar${n}`],v?"OK":"Não")});
+    const COR_Q={dourado:"Épico",amarelo:"Épico",lilas:"Lendário",roxo:"Lendário",vermelho:"Ancestral",rosa:"Ancestral",azul:"Raro",branco:"Comum",cinza:"Comum"};
+    const ordem=[["g1","criacao"],["g1","destruicao"],["g1","harmonia"],["g2","criacao"],["g2","destruicao"],["g2","harmonia"],["g3","criacao"],["g3","destruicao"],["g3","harmonia"]];
+    (Array.isArray(r.apoio)?r.apoio:[]).slice(0,9).forEach((x,i)=>{const [g,k]=ordem[i],cur=noVal(d.nos?.[g]?.[k]),base=`nos.${g}.${k}`,lbl=`${NO_TIPOS[k].label} ${g.slice(1)}`;
+      const attr=noAttrMatch(k,x?.atributo);if(!attr){notes.push(`${lbl}: "${x?.atributo||"?"}" não é atributo desse nó.`);return}
+      push(`${lbl}: atributo`,`${base}.attr`,cur.attr,attr);const v=parseNumLoose(x.valor);if(v!=null)push(`${lbl}: valor`,`${base}.v`,cur.v,v);
+      const q=COR_Q[norm(x.cor).toLowerCase().replace("lilás","lilas")]||COR_Q[String(x.cor||"").toLowerCase()];if(q)push(`${lbl}: qualidade`,`${base}.q`,cur.q,q)});
+    const nl=r.nosLiberados||{};const tr=["g1","g2","g3"].filter(g=>typeof nl[g]==="number").map((g,i)=>`trecho ${g.slice(1)}: ${nl[g]}/3 nós`);if(tr.length)notes.push(`Nós pequenos liberados (${tr.join(", ")}). Para preencher atributo e valor de cada nó, tire o print com o painel "Atributos Ativos" aberto.`);notes.push("SR e Colar não aparecem nessa tela.")}
+  P.diff=diff;P.patch=patch;P.note=notes.join(" ")}
+function applyPrint(){const P=S.print;(P.patch||[]).forEach(([p,v])=>setPath(S.draft,p,v));
+  if(P.joia){S.draft.joias=S.draft.joias||[];S.draft.joias.push({...P.joia})}
+  S.dirty=true;if(P.url)URL.revokeObjectURL(P.url);const tab={equip:"equip",tooltip:P.joia?"geral":"vazio",pet:"pet",despertar:"despertar",no:"despertar"}[P.mode];S.print=null;S.tab=tab;render();toast("Aplicado. Confira e clique em Salvar.")}
+
+/* ---------------- Versão web (GitHub Pages + Firebase) ---------------- */
+/* dono do sistema: o único que edita o catálogo (as regras do Firestore usam o mesmo uid) */
+const DONO_UID = "ZyKUgaouUScPRQdZvcQ7gEIEANI2";
+const ICONES = new Set(DEFAULT_CHARS.map(c=>c.id));
+/* exportar planilha vira um download comum do navegador */
+downloads={save:async({filename,data})=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([data],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);return {status:"saved"}}};
+/* adaptador com a mesma forma usada pelo resto do código (db.doc(caminho).set) */
+function fbAdapter(){const {db:fdb,doc,setDoc}=FB;return {doc:p=>({set:async d=>{
+  if(p==="config/reference")return setDoc(doc(fdb,"config","reference"),d);
+  const m=/^players\/([^/]+)$/.exec(p);if(m){const x={...d};delete x.resumo;return setDoc(doc(fdb,"jogadores",m[1]),x,{mergeFields:Object.keys(x)})}
+  throw new Error("caminho não suportado: "+p)}})}}
+function loginView(){return `<div class="panel login"><h2>GC Tracker</h2>
+  <div class="muted">Controle de personagens do Grand Chase Classic da guilda. Entre com a sua conta Google: cada um cadastra e salva os próprios personagens.</div>
+  <button class="btn primary google" data-act="login"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Entrar com Google</button>
+  ${S.loginErr?`<div class="small" style="color:var(--t-caos)">${esc(S.loginErr)}</div>`:""}</div>`}
+function contaPanel(){const u=window.FB?.auth?.currentUser;const r=S.restore;
+  return `<div class="panel sect"><h3>Conta</h3>
+   <div class="row between"><div class="small">Conectado como <b>${esc(u?.email||"—")}</b><div class="muted" style="font-size:11.5px">Seu ID: <code>${esc(S.uid||"")}</code>${S.admin?" · dono do sistema":""}</div></div><button class="btn ghost" data-act="logout">Sair</button></div></div>
+  <div class="panel sect"><h3>Backup (.json)</h3><div class="muted small">Cópia completa dos seus dados (personagens, histórico, inventário e nick)${S.admin?" e do catálogo":""}. Serve para guardar uma cópia ou levar os dados para outra conta.</div>
+   <div class="row"><button class="btn" data-act="bkdown">Baixar backup</button><label class="btn ghost" style="cursor:pointer">Restaurar backup…<input type="file" hidden accept=".json,application/json" data-act="bkfile"></label></div>
+   ${r?.error?`<div style="color:var(--t-caos)">${esc(r.error)}</div>`:""}
+   ${r?.data?`<div class="sect"><div class="small">Arquivo com <b>${Object.keys(r.data.chars||{}).length}</b> personagens, histórico de <b>${Object.keys(r.data.hist||{}).length}</b>, nick <b>${esc(r.data.jogador?.nick||"—")}</b>${r.data.config?(S.admin?" e o <b>catálogo</b>":" (o catálogo do arquivo será ignorado: só o dono grava)"):""}.</div>
+     <div class="small" style="color:var(--partial)">Isso <b>substitui</b> os seus dados atuais por os do arquivo.</div>
+     <div class="row"><button class="btn primary" data-act="bksave" ${r.saving?"disabled":""}>${r.saving?"Gravando…":"Restaurar"}</button><button class="btn" data-act="bkcancel">Cancelar</button></div></div>`:""}</div>`}
+function backupData(){const p=S.players[S.uid]||{};const out={versao:1,geradoEm:new Date().toISOString(),jogador:{nick:p.nick||"",inventario:p.inventario||{},criadoEm:p.criadoEm||null},chars:S.chars,hist:S.hist};if(S.admin&&S.cfg)out.config=S.cfg;return out}
+async function bkDown(){await loadHist();const blob=new Blob([JSON.stringify(backupData(),null,1)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`GC Tracker backup ${today()}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000)}
+async function bkFile(file){try{const d=JSON.parse(await file.text());if(!d||typeof d!=="object"||!d.chars)throw 0;S.restore={data:d}}catch{S.restore={error:"Esse arquivo não é um backup do GC Tracker."}}render()}
+async function bkSave(){const r=S.restore;if(!r?.data||!canWrite())return;r.saving=true;render();const d=r.data,{db:fdb,doc,writeBatch}=FB;
+  try{const chars={};for(const [id,c] of Object.entries(d.chars||{}))chars[id]=c?.data&&!c.lv&&!c.pecas?c.data:c;
+    const hist={};for(const [id,h] of Object.entries(d.hist||{}))hist[id]={pontos:(h?.data||h)?.pontos||[]};
+    const resumo={};for(const [id,c] of Object.entries(chars))resumo[id]=resumoOf(c);
+    const nick=(d.jogador?.nick||S.players[S.uid]?.nick||"").slice(0,40);
+    const b=writeBatch(fdb);b.set(doc(fdb,"fichas",S.uid),{chars});b.set(doc(fdb,"historico",S.uid),{h:hist});
+    b.set(doc(fdb,"jogadores",S.uid),{nick,inventario:d.jogador?.inventario||{},criadoEm:d.jogador?.criadoEm||new Date().toISOString(),resumo});
+    if(d.config&&S.admin){const cfg={...d.config,dono:S.uid};b.set(doc(fdb,"config","reference"),cfg)}
+    await b.commit();S.chars=chars;S.hist=hist;S.histLoaded=true;S.restore=null;toast("Backup restaurado");render()}
+  catch(err){r.saving=false;toast(errMsg(err));render()}}
+document.addEventListener("click",async e=>{const t=e.target.closest?.("[data-act]");if(!t)return;const a=t.dataset.act;
+  if(a==="login"){S.loginErr="";try{await FB.signInWithPopup(FB.auth,new FB.GoogleAuthProvider())}catch(err){if(err?.code!=="auth/popup-closed-by-user")S.loginErr=err?.code==="auth/unauthorized-domain"?"Este endereço ainda não está autorizado no Firebase (Authentication → Configurações → Domínios autorizados).":"Não deu para entrar agora. Tente de novo.";render()}}
+  else if(a==="logout"){await FB.signOut(FB.auth);location.reload()}
+  else if(a==="bkdown")bkDown();
+  else if(a==="bksave")bkSave();
+  else if(a==="bkcancel"){S.restore=null;render()}});
+document.addEventListener("change",e=>{const t=e.target;if(t?.dataset?.act==="bkfile"&&t.files?.[0]){bkFile(t.files[0]);t.value=""}});
+
+/* ---------------- Inicialização ---------------- */
+function setStatus(t){document.getElementById("status").textContent=t}
+let unsub=[];
+function bootFB(){const {auth,db:fdb,doc,collection,onSnapshot,onAuthStateChanged}=FB;
+  onAuthStateChanged(auth,u=>{unsub.forEach(f=>f());unsub=[];
+    if(!u){S.uid=null;db=null;S.needLogin=true;setStatus("Não conectado");render();return}
+    S.needLogin=false;S.uid=u.uid;db=fbAdapter();S.admin=!!DONO_UID&&u.uid===DONO_UID;S.histLoaded=false;S.hist={};setStatus("Conectando…");render();
+    const erro=err=>{setStatus(err?.code==="permission-denied"?"Sem permissão no banco":"Erro ao ler os dados");console.warn(err)};
+    unsub.push(onSnapshot(doc(fdb,"config","reference"),s=>{S.cfg=s.exists()?s.data():null;if(S.view!=="char"||!S.dirty)render()},erro));
+    unsub.push(onSnapshot(collection(fdb,"jogadores"),s=>{const m={};s.docs.forEach(d=>m[d.id]=d.data());S.players=m;S.playersOk=true;checkNick();if(S.view==="ranking"||S.view==="dados"||S.view==="painel")render()},erro));
+    unsub.push(onSnapshot(doc(fdb,"fichas",u.uid),s=>{S.chars=s.exists()?(s.data().chars||{}):{};S.ready=true;setStatus(`${Object.keys(S.chars).length} personagens salvos`);if(!(S.view==="char"&&S.dirty))render()},erro))})}
+render();
+if(window.FB)bootFB();else window.addEventListener("fb-pronto",bootFB,{once:true});
+</script>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,doc,collection,onSnapshot,getDoc,setDoc,writeBatch,FieldPath} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const app=initializeApp({
+  apiKey:"AIzaSyCW29bqBLiqwD5t7SpKOET3iI_eLZt0RWo",
+  authDomain:"gc-tracker-587d4.firebaseapp.com",
+  projectId:"gc-tracker-587d4",
+  storageBucket:"gc-tracker-587d4.firebasestorage.app",
+  messagingSenderId:"71451877",
+  appId:"1:71451877:web:873ceb99ea1661b9de000c"
+});
+/* cache local no navegador: a página abre com o que já tem e só busca o que mudou */
+let fdb;try{fdb=initializeFirestore(app,{ignoreUndefinedProperties:true,localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})})}catch{fdb=initializeFirestore(app,{ignoreUndefinedProperties:true})}
+window.FB={app,db:fdb,auth:getAuth(app),GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged,doc,collection,onSnapshot,getDoc,setDoc,writeBatch,FieldPath};
+window.dispatchEvent(new Event("fb-pronto"));
+</script>
