@@ -479,7 +479,7 @@ personagens(){const base=catalog();const rows=base.map((ch,i)=>{const c=charOf(c
 char(){const ch=catById(S.charId);if(!ch){S.view="personagens";return VIEWS.personagens()}const c=S.draft,p=progress(c);
   const tabs=[["geral","Geral"],["equip","Equipamentos e cartas"],["vazio","Vazio"],["despertar","Despertar"],["pet","Pet"],["inventario","Inventário"],["metas","Metas"]];
   return `<div class="charhd${idCls(ch)}"${idStyle(ch)}><button class="btn ghost" data-act="go" data-v="personagens" aria-label="Voltar">←</button>${avatar(ch,"lg")}
-    <div class="meta"><h2>${esc(ch.nome)}</h2><span class="muted num">${fmtAT(c.at)} · ${p.ok}/${p.total} metas</span></div>
+    <div class="meta"><h2>${esc(ch.nomeCompleto||ch.nome)}</h2><span class="muted num">${fmtAT(c.at)} · ${p.ok}/${p.total} metas</span></div>
     <div class="charnav" style="margin-left:auto">
       <button class="btn" data-act="charnav" data-d="-1" aria-label="Personagem anterior" title="Anterior (←)">‹</button>
       <select data-act="charjump" aria-label="Ir para o personagem">${catalog().map(x=>`<option value="${x.id}" ${x.id===ch.id?"selected":""}>${esc(x.nome)}</option>`).join("")}</select>
@@ -567,13 +567,15 @@ function catalogAdmin(){const cs=catalogAll();const n=S.newChar;
    <div class="muted small">Quando o jogo lançar um personagem novo, cadastre aqui. Ele passa a aparecer em todas as telas e na importação/exportação.</div>
    ${n?`<div class="panel sect" style="background:var(--surface-2)"><div class="row">
      <label class="f">Nome<input type="text" id="nc_nome" value="${esc(n.nome)}" maxlength="30"></label>
+     <label class="f">Nome completo (opcional)<input type="text" id="nc_nomec" value="${esc(n.nomeCompleto||"")}" maxlength="60"></label>
      <label class="f">Imagem<input type="file" id="nc_img" accept="image/png,image/jpeg,image/webp,image/gif" ${assets?"":"disabled"}></label>
      <label class="f">Cor do card<input type="color" id="nc_cor" value="${esc(n.cor||"#8A90A2")}"></label>
      <label class="f">Texto<select id="nc_texto"><option value="auto">Automático</option><option value="preto">Preto</option><option value="branco">Branco</option></select></label>
      <label class="row small"><input type="checkbox" id="nc_a2" ${n.arma2?"checked":""}> Tem segunda arma</label></div>
      <div class="row"><button class="btn primary" data-act="ncsave" ${n.saving?"disabled":""}>${n.saving?"Salvando…":"Cadastrar"}</button><button class="btn" data-act="nccancel">Cancelar</button>${n.error?`<span style="color:var(--t-caos)" class="small">${esc(n.error)}</span>`:""}</div></div>`:""}
-   <div class="tablebox"><table><thead><tr><th></th><th>Nome</th><th>Cor do card</th><th>Texto</th><th>2ª arma</th><th>Ativo</th><th>Ordem</th><th>Imagem</th></tr></thead><tbody>
+   <div class="tablebox"><table><thead><tr><th></th><th>Nome</th><th>Nome completo</th><th>Cor do card</th><th>Texto</th><th>2ª arma</th><th>Ativo</th><th>Ordem</th><th>Imagem</th></tr></thead><tbody>
    ${cs.map((c,i)=>`<tr><td>${avatar(c,"sm")}</td><td><b>${esc(c.nome)}</b></td>
+     <td><input type="text" data-act="catnomec" data-id="${c.id}" value="${esc(c.nomeCompleto||"")}" maxlength="60" placeholder="${esc(c.nome)}" aria-label="Nome completo de ${esc(c.nome)}"></td>
      <td><input type="color" data-act="catcolor" data-id="${c.id}" value="${esc(c.cor||"#8A90A2")}" aria-label="Cor do card de ${esc(c.nome)}">${c.cor?"":' <span class="muted small">sem cor</span>'}</td>
      <td><span class="row" style="gap:6px;flex-wrap:nowrap"><select data-act="cattexto" data-id="${c.id}" aria-label="Cor do texto de ${esc(c.nome)}">${[["auto","Automático"],["preto","Preto"],["branco","Branco"]].map(([v,l])=>`<option value="${v}" ${(c.texto||"auto")===v?"selected":""}>${l}</option>`).join("")}</select>${c.cor?`<span class="chip" style="background:${esc(c.cor)};color:${inkOf(c)}">${esc(c.nome)}</span>`:""}</span></td>
      <td><input type="checkbox" data-act="catflag" data-id="${c.id}" data-k="arma2" ${c.arma2?"checked":""} aria-label="Segunda arma"></td>
@@ -1111,6 +1113,7 @@ document.addEventListener("change",async e=>{const t=e.target;
   else if(a==="printpiece"&&S.print){S.print.piece=t.value;S.print.diff=null;renderOverlay()}
   else if(a==="printjoiaeq"&&S.print?.joia){S.print.joia.equipado=t.checked}
   else if(a==="catflag"){await updateCatalog(t.dataset.id,{[t.dataset.k]:t.checked})}
+  else if(a==="catnomec"){await updateCatalog(t.dataset.id,{nomeCompleto:t.value.trim().slice(0,60)||null})}
   else if(a==="cattexto"){await updateCatalog(t.dataset.id,{texto:t.value==="auto"?null:t.value})}
   else if(a==="invconta"){const v=t.value===""?null:Math.max(0,Math.round(+t.value));await saveInvConta(t.dataset.r,v)}
   else if(a==="invchar"){const v=t.value===""?null:Math.max(0,Math.round(+t.value));await saveInvChar(t.dataset.id,t.dataset.r,v)}
@@ -1181,10 +1184,10 @@ async function writeCfg(cfg){cfg.chars.forEach((c,i)=>c.ordem=i+1);await db.doc(
 async function updateCatalog(id,patch){if(!db)return;const cfg=cfgBase();const c=cfg.chars.find(x=>x.id===id);if(!c)return;Object.assign(c,patch);try{await writeCfg(cfg);render()}catch(err){toast(errMsg(err))}}
 async function moveChar(id,d){const cfg=cfgBase();const i=cfg.chars.findIndex(x=>x.id===id),j=i+d;if(i<0||j<0||j>=cfg.chars.length)return;[cfg.chars[i],cfg.chars[j]]=[cfg.chars[j],cfg.chars[i]];try{await writeCfg(cfg);render()}catch(err){toast(errMsg(err))}}
 async function uploadCharImg(id,file){if(!assets){toast("Envio de imagem indisponível.");return}try{const r=await assets.upload(file);await updateCatalog(id,{img:r.id});toast("Imagem atualizada")}catch(err){toast(err?.code==="unsupported_type"?"Use PNG, JPG, WebP ou GIF.":"Não deu para enviar a imagem.")}}
-async function saveNewChar(){const n=S.newChar;n.nome=(document.getElementById("nc_nome")?.value||"").trim();n.arma2=!!document.getElementById("nc_a2")?.checked;n.cor=(document.getElementById("nc_cor")?.value||"").toUpperCase()||null;const tx=document.getElementById("nc_texto")?.value;n.texto=tx&&tx!=="auto"?tx:null;
+async function saveNewChar(){const n=S.newChar;n.nome=(document.getElementById("nc_nome")?.value||"").trim();n.arma2=!!document.getElementById("nc_a2")?.checked;n.cor=(document.getElementById("nc_cor")?.value||"").toUpperCase()||null;const tx=document.getElementById("nc_texto")?.value;n.texto=tx&&tx!=="auto"?tx:null;n.nomeCompleto=(document.getElementById("nc_nomec")?.value||"").trim()||null;
   if(!n.nome){n.error="Digite o nome.";render();return}const id=slug(n.nome);if(catalogAll().some(c=>c.id===id)){n.error="Já existe um personagem com esse nome.";render();return}
   n.saving=true;n.error="";render();
-  try{let img=null;if(n.file&&assets){img=(await assets.upload(n.file)).id}const cfg=cfgBase();cfg.chars.push({id,nome:n.nome,arma2:n.arma2,img,cor:n.cor,texto:n.texto,ativo:true,ordem:cfg.chars.length+1});await writeCfg(cfg);S.newChar=null;toast(`${n.nome} cadastrado`);render()}
+  try{let img=null;if(n.file&&assets){img=(await assets.upload(n.file)).id}const cfg=cfgBase();cfg.chars.push({id,nome:n.nome,nomeCompleto:n.nomeCompleto,arma2:n.arma2,img,cor:n.cor,texto:n.texto,ativo:true,ordem:cfg.chars.length+1});await writeCfg(cfg);S.newChar=null;toast(`${n.nome} cadastrado`);render()}
   catch(err){n.saving=false;n.error=err?.code==="unsupported_type"?"Use PNG, JPG, WebP ou GIF.":errMsg(err);render()}}
 
 /* ---------------- Importação ---------------- */
