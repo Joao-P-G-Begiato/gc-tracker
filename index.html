@@ -739,9 +739,22 @@ function invView(){const rc=recursos("conta"),ri=recursos("personagem"),cs=catal
    ${rc.length?`<div class="invgrid">${rc.map(r=>`<label class="f">${esc(r.nome)}${qtdIn("invconta",`data-r="${r.id}"`,conta[r.id],r.nome)}</label>`).join("")}</div>`:'<div class="muted">Nenhum recurso de conta cadastrado.</div>'}</div>
   <div class="panel sect"><div><h3>Inventário por personagem</h3><div class="muted small">Recursos individuais: são de cada personagem e não podem ser transferidos. Edite direto na tabela.</div></div>
    ${ri.length?bulkPanel(ri,cs):""}
-   ${ri.length?`<div class="tablebox"><table><thead><tr><th></th><th>Personagem</th>${ri.map(r=>`<th class="num">${esc(r.nome)}</th>`).join("")}</tr></thead><tbody>
+   ${ri.length?`<div class="row" style="gap:6px"><button class="btn ${S.inv.modo==="editar"?"primary":""} small" data-act="invmodo" data-v="editar">Editar</button><button class="btn ${S.inv.modo==="ver"?"primary":""} small" data-act="invmodo" data-v="ver">Ver e ordenar</button></div>`:""}
+   ${ri.length&&S.inv.modo==="ver"?invTabelaVer(ri,cs):ri.length?`<div class="tablebox"><table><thead><tr><th></th><th>Personagem</th>${ri.map(r=>`<th class="num">${esc(r.nome)}</th>`).join("")}</tr></thead><tbody>
    ${cs.map(ch=>{const inv=S.chars[ch.id]?.inventario||{};return `<tr><td>${avatar(ch,"sm")}</td><td><b>${esc(ch.nome)}</b></td>${ri.map(r=>`<td>${qtdIn("invchar",`data-id="${ch.id}" data-r="${r.id}"`,inv[r.id],`${r.nome} de ${ch.nome}`)}</td>`).join("")}</tr>`}).join("")}
    </tbody></table></div>`:'<div class="muted">Nenhum recurso individual cadastrado.</div>'}</div></div>`}
+
+/* modo da tabela por personagem: "editar" (inputs) ou "ver" (valores, ordenável por coluna) */
+try{S.inv={modo:"editar",k:"",d:"desc",...JSON.parse(localStorage.getItem("gc-inv")||"{}")}}catch{S.inv={modo:"editar",k:"",d:"desc"}}
+function setInv(patch){S.inv={...S.inv,...patch};try{localStorage.setItem("gc-inv",JSON.stringify(S.inv))}catch{}render()}
+/* clique na coluna: maior primeiro → menor primeiro → ordem do cadastro (nome: A-Z → Z-A → cadastro) */
+function invSort(k){const s=S.inv,first=k==="nome"?"asc":"desc";if(!k||s.k!==k)setInv({k,d:first});else if(s.d===first)setInv({d:first==="asc"?"desc":"asc"});else setInv({k:""})}
+function invTabelaVer(ri,cs){const s=S.inv,inv=id=>S.chars[id]?.inventario||{};
+  const linhas=[...cs];if(s.k==="nome")linhas.sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));else if(ri.some(r=>r.id===s.k))linhas.sort((a,b)=>(+inv(a.id)[s.k]||0)-(+inv(b.id)[s.k]||0));if(s.k&&s.d==="desc")linhas.reverse();
+  const th=(k,label,cls="")=>{const on=s.k===k;return `<th class="${cls}" aria-sort="${on?(s.d==="asc"?"ascending":"descending"):"none"}"><button class="thsort ${on?"on":""}" data-act="invsort" data-k="${k}" title="Ordenar por ${esc(label)}">${esc(label)}<span class="seta">${on?(s.d==="asc"?"▲":"▼"):"↕"}</span></button></th>`};
+  return `<div class="tablebox"><table><thead><tr><th></th>${th("nome","Personagem")}${ri.map(r=>th(r.id,r.nome,"num")).join("")}</tr></thead><tbody>
+   ${linhas.map(ch=>{const v=inv(ch.id);return `<tr style="cursor:pointer" data-act="open" data-id="${ch.id}"><td>${avatar(ch,"sm")}</td><td><b>${esc(ch.nome)}</b></td>${ri.map(r=>`<td class="num ${s.k===r.id?"":"muted"}">${+v[r.id]?`<b style="color:var(--ink)">${qtd(v[r.id])}</b>`:"0"}</td>`).join("")}</tr>`}).join("")}
+   </tbody></table></div><div class="muted small">Clique no nome da coluna para ordenar (maior primeiro, depois menor primeiro, depois a ordem do cadastro). Clique na linha para abrir o personagem.${s.k?` · <button class="btn ghost small" data-act="invsort" data-k="">ordem do cadastro</button>`:""}</div>`}
 
 /* lançamento em lote: mesmo recurso e quantidade em vários personagens */
 function bulkState(ri){const b=S.bulk||(S.bulk={r:"",q:"",op:"somar",sel:[]});if(!ri.some(r=>r.id===b.r))b.r=ri[0]?.id||"";return b}
@@ -822,8 +835,8 @@ const nVazio=(c,lista,grupo)=>lista.filter(p=>c[grupo]?.[p.id]?.conjunto==="Vazi
 const FORJA_ITENS = {brinco:{label:"Brinco",nivel:c=>farmLvl(c,"Brinco"),rec:"brinco",max:4},piercing:{label:"Piercing",nivel:c=>farmLvl(c,"Piercing"),rec:"piercing",max:4},
   conjunto:{label:"Conjunto (brinco + piercing)",partes:["brinco","piercing"],max:4},
   torn:{label:"Tornozeleira",nivel:c=>+c.tornozeleira||0,rec:"torn",max:5},
-  vazioeq:{label:"Baú de equipamento do Vazio",nivel:c=>nVazio(c,EQUIP.filter(p=>!p.only2),"pecas"),rec:"vazioeq",max:7,vazio:true},
-  vazioac:{label:"Baú de acessório do Vazio",nivel:c=>nVazio(c,ACESS,"acess"),rec:"vazioac",max:5,vazio:true}};
+  vazioeq:{label:"Baú de equipamento do Vazio",nivel:c=>nVazio(c,EQUIP.filter(p=>!p.only2),"pecas"),rec:"vazioeq",max:7,vazio:true,criar:"Criar equipamento do Vazio",grupo:"pecas",pecas:ch=>EQUIP.filter(p=>!p.only2||ch.arma2)},
+  vazioac:{label:"Baú de acessório do Vazio",nivel:c=>nVazio(c,ACESS,"acess"),rec:"vazioac",max:5,vazio:true,criar:"Criar acessório do Vazio",grupo:"acess",pecas:()=>ACESS}};
 function nivelNome(item,n){if(item==="torn")return n?`${n} (${TORN_NOME[n-1]})`:"nenhuma";if(FORJA_ITENS[item]?.vazio)return `${n} de ${FORJA_ITENS[item].max} peças`;return TIER_NOME[n]||"Nenhum"}
 function alvoNome(item,n){if(item==="torn")return `${n} · ${TORN_NOME[n-1]}`;if(FORJA_ITENS[item]?.vazio)return `${n} de ${FORJA_ITENS[item].max} peças do Vazio`;
   const t=["RARO","EPICO","LENDÁRIO","CAOS"][n-1];return item==="conjunto"?`${TIER_NOME[n]} · brinco + piercing`:`${TIER_NOME[n]} · ${NOMES[item][t]}`}
@@ -883,7 +896,7 @@ function forjaBau(item,filtros,um){const I=FORJA_ITENS[item],R=receitas()[I.rec]
   const pecas=rows.reduce((s,r)=>s+r.faltaPecas,0),prontos=rows.reduce((s,r)=>s+r.prontos,0),frag=rows.reduce((s,r)=>s+r.frag,0);
   const lista=(um?rows.filter(r=>r.ch.id===um.id):rows).filter(r=>um||r.frag>0).sort((a,b)=>(b.resto/por)-(a.resto/por)||b.frag-a.frag);
   const filtrosSemAlvo=filtros.replace(/<label class="f">Alvo[\s\S]*?<\/label>/,"");
-  return `<div class="row between" style="margin-bottom:8px"><h2>Forja${um?` · ${esc(um.nome)}`:""}</h2></div>
+  return `<div class="row between" style="margin-bottom:8px"><h2>Forja${um?` · ${esc(um.nome)}`:""}</h2><button class="btn primary" data-act="criaropen" data-item="${item}" ${prontos?"":`disabled title="Ninguém tem ${por} ${esc(nome)}"`}>${esc(I.criar)}</button></div>
   ${filtrosSemAlvo}
   <div class="panel small" style="margin-bottom:12px;border-left:3px solid var(--label)">Cada baú custa <b>${por} ${esc(nome)}</b>. Os fragmentos são de cada personagem, mas o baú pode ser passado para outro: por isso a lista mostra quem está <b>mais perto de fechar o próximo baú</b>, para você saber onde colocar fragmentos que ganhar.</div>
   <div class="stats">
@@ -898,6 +911,36 @@ function forjaBau(item,filtros,um){const I=FORJA_ITENS[item],R=receitas()[I.rec]
      <td class="num"><b>${por-r.resto}</b></td><td class="num muted">${r.faltaPecas||"✓"}</td></tr>`).join("")}</tbody></table></div>
    <div class="muted small">Ordenado por quem está mais perto do próximo baú. "Fragmentos" vem do inventário de cada personagem; clique para abrir o personagem.</div>`
    :`<div class="muted">Nenhum personagem tem ${esc(nome)} no inventário.</div>`}</div>`}
+/* criar peça do Vazio: debita os fragmentos de quem tem e marca a peça como Vazio no personagem de destino */
+function criarDados(){const C=S.criar,I=FORJA_ITENS[C.item],R=receitas()[I.rec],rec=Object.keys(R[1])[0],por=R[1][rec];
+  const frag=id=>+(S.chars[id]?.inventario?.[rec])||0;
+  const origens=catalog().filter(ch=>frag(ch.id)>=por).sort((a,b)=>frag(b.id)-frag(a.id));
+  const faltam=ch=>{const c=charOf(ch.id);return I.pecas(ch).filter(p=>c[I.grupo]?.[p.id]?.conjunto!=="Vazio")};
+  const destinos=catalog().filter(ch=>faltam(ch).length);
+  if(!origens.some(ch=>ch.id===C.de))C.de=origens[0]?.id||"";
+  if(!destinos.some(ch=>ch.id===C.para))C.para=destinos.some(ch=>ch.id===C.de)?C.de:destinos[0]?.id||"";
+  const pecas=C.para?faltam(catById(C.para)):[];if(!pecas.some(p=>p.id===C.peca))C.peca=pecas[0]?.id||"";
+  return {I,rec,por,frag,origens,destinos,pecas,nome:recursosAll().find(r=>r.id===rec)?.nome||rec}}
+function criarModal(){const C=S.criar,{I,por,frag,origens,destinos,pecas,nome}=criarDados();const de=catById(C.de),para=catById(C.para),pc=pecas.find(p=>p.id===C.peca);
+  const conj=para&&pc?charOf(para.id)[I.grupo]?.[pc.id]?.conjunto||"Nenhum":"";
+  return `<div class="modal" data-act="criarclose-bg"><div class="box" role="dialog" aria-label="${esc(I.criar)}">
+   <div class="row between"><h3>${esc(I.criar)}</h3><button class="btn ghost" data-act="criarclose" aria-label="Fechar">✕</button></div>
+   ${!origens.length?`<div class="muted">Ninguém tem ${por} ${esc(nome)}.</div>`:!destinos.length?`<div class="muted">Todos os personagens já têm todas as peças do Vazio.</div>`:`
+   <label class="f">Fragmentos de quem (tem ${por} ou mais)<select data-act="criarset" data-k="de">${origens.map(ch=>`<option value="${ch.id}" ${ch.id===C.de?"selected":""}>${esc(ch.nome)} · ${qtd(frag(ch.id))}</option>`).join("")}</select></label>
+   <label class="f">Para qual personagem<select data-act="criarset" data-k="para">${destinos.map(ch=>`<option value="${ch.id}" ${ch.id===C.para?"selected":""}>${esc(ch.nome)}</option>`).join("")}</select></label>
+   <label class="f">Peça (só as que ainda não são do Vazio)<select data-act="criarset" data-k="peca">${pecas.map(p=>`<option value="${p.id}" ${p.id===C.peca?"selected":""}>${esc(p.label)}</option>`).join("")}</select></label>
+   <div class="panel small" style="border-left:3px solid var(--label)">${esc(de.nome)}: ${qtd(frag(de.id))} → <b>${qtd(frag(de.id)-por)}</b> ${esc(nome)}<br>${esc(para.nome)} · ${esc(pc.label)}: ${esc(conj)} → <b>Vazio</b>${conj==="Berkas"?'<br><span class="muted">As propriedades e cartas da peça ficam como estão: confira depois no personagem.</span>':""}</div>`}
+   ${C.error?`<div class="small" style="color:var(--t-caos)">${esc(C.error)}</div>`:""}
+   <div class="row" style="justify-content:flex-end"><button class="btn" data-act="criarclose">Cancelar</button><button class="btn primary" data-act="criarok" ${origens.length&&destinos.length&&!C.saving?"":"disabled"}>${C.saving?"Gravando…":"Criar"}</button></div>
+  </div></div>`}
+async function criarAplicar(){if(!canWrite())return;const C=S.criar,{I,rec,por,frag,pecas,nome}=criarDados();const pc=pecas.find(p=>p.id===C.peca);
+  if(!C.de||!C.para||!pc||frag(C.de)<por)return;
+  const src=charOf(C.de),dst=C.de===C.para?src:charOf(C.para);
+  src.inventario={...(src.inventario||{}),[rec]:frag(C.de)-por};dst[I.grupo]={...(dst[I.grupo]||{}),[pc.id]:{...(dst[I.grupo]?.[pc.id]||{}),conjunto:"Vazio"}};
+  C.saving=true;C.error="";renderOverlay();
+  try{await ensurePlayer();await writeChars(C.de===C.para?[[C.de,src]]:[[C.de,src],[C.para,dst]]);const de=catById(C.de),para=catById(C.para);S.criar=null;renderOverlay();render();
+    toast(`${pc.label} do Vazio criado para ${para.nome} (−${por} ${nome} de ${de.nome})`)}
+  catch(err){C.saving=false;C.error=errMsg(err);renderOverlay()}}
 VIEWS.forja=forjaView;
 
 /* ---------------- Overlay: barra de salvar, modal de print, toast ---------------- */
@@ -917,6 +960,7 @@ async function saveNickNovo(){const el=document.getElementById("nickNovo");const
 function renderOverlay(){let h="";if(S.askNick&&!S.print)h+=nickModal();
   if(S.view==="char"&&S.dirty)h+=`<div class="savebar"><div class="wrap"><b>Alterações não salvas</b><span style="flex:1"></span><button class="btn ghost" data-act="discard">Descartar</button><button class="btn primary" data-act="save" ${S.saving?"disabled":""}>${S.saving?"Salvando…":"Salvar"}</button></div></div>`;
   if(S.print)h+=printModal();
+  if(S.criar)h+=criarModal();
   if(S.toast)h+=`<div class="toast" role="status">${esc(S.toast)}</div>`;
   document.getElementById("overlay").innerHTML=h}
 const PRINT_MODES = {
@@ -1002,7 +1046,7 @@ function niceStep(r){const p=Math.pow(10,Math.floor(Math.log10(r||1)));const f=r
 
 /* ---------------- Eventos ---------------- */
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-act]");if(!t)return;const a=t.dataset.act;
-  if(a==="closeprint-bg"&&e.target!==t)return;
+  if((a==="closeprint-bg"||a==="criarclose-bg")&&e.target!==t)return;
   if(a==="go"){if(!(await leaveChar()))return;S.view=t.dataset.v;window.scrollTo(0,0);render()}
   else if(a==="open"){openChar(t.dataset.id)}
   else if(a==="tab"){S.tab=t.dataset.t;render()}
@@ -1020,6 +1064,11 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-act]
   else if(a==="histvis"){S.histOff=t.dataset.v==="none"?new Set(catalog().map(c=>c.id)):new Set();saveHistPref();render()}
   else if(a==="histopen"){S.histChar=t.dataset.id;window.scrollTo(0,0);render()}
   else if(a==="bulkapply"){await bulkApply()}
+  else if(a==="invmodo"){setInv({modo:t.dataset.v==="ver"?"ver":"editar"})}
+  else if(a==="invsort"){invSort(t.dataset.k)}
+  else if(a==="criaropen"){S.criar={item:t.dataset.item};renderOverlay()}
+  else if(a==="criarclose"||a==="criarclose-bg"){if(!S.criar?.saving){S.criar=null;renderOverlay()}}
+  else if(a==="criarok"){await criarAplicar()}
   else if(a==="bulkall"){S.bulk.sel=catalog().map(c=>c.id);render()}
   else if(a==="bulknone"){S.bulk.sel=[];render()}
   else if(a==="newrec"){S.newRec={nome:""};render()}
@@ -1068,6 +1117,7 @@ document.addEventListener("change",async e=>{const t=e.target;
   else if(a==="recnome"){const v=t.value.trim();if(v)await updateRecurso(t.dataset.id,{nome:v});else render()}
   else if(a==="recescopo"){await updateRecurso(t.dataset.id,{escopo:t.value})}
   else if(a==="recativo"){await updateRecurso(t.dataset.id,{ativo:t.checked})}
+  else if(a==="criarset"&&S.criar){S.criar[t.dataset.k]=t.value;S.criar.error="";renderOverlay()}
   else if(a==="forjaitem"){setForja({item:t.value,alvo:"max"})}
   else if(a==="forjaalvo"){setForja({alvo:t.value})}
   else if(a==="forjach"){setForja({ch:t.value})}
